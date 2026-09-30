@@ -19,12 +19,14 @@ REGISTER_COLUMNS = [
     "Date de réception",
     "Objet",
     "Type de dossier",
+    "Canal de réception",
     "Direction concernée",
     "Service destinataire actuel",
     "Statut",
     "Priorité",
     "Échéance prévue",
     "Agent en charge",
+    "Référence externe (optionnel)",
     "Notes",
 ]
 
@@ -33,9 +35,21 @@ TYPES_DOSSIER = [
     "Courrier sortant",
     "Dossier projet",
     "Dossier marché",
-    "Dossier RH",
+    "Dossier RH / Carrière",
+    "Dossier comptable / budgétaire",
+    "Dossier état civil (naissance / mariage / décès)",
     "Autre",
 ]
+
+# Circuit d'entrée d'un dossier : conforme au fonctionnement réel décrit par
+# l'utilisateur, le canal normal pour un dossier externe est le service du
+# courrier, qui l'achemine ensuite vers le poste concerné (voir
+# utils.orgchart.SERVICE_COURRIER et la page Transmissions). Le dépôt direct
+# reste possible pour un dossier d'origine interne (ex. note initiée par un
+# service lui-même), sans passer par le bureau d'ordre.
+CANAL_COURRIER = "Service du Courrier (bureau d'ordre)"
+CANAL_DIRECT = "Dépôt direct au service concerné (dossier d'origine interne)"
+CANAUX_RECEPTION = [CANAL_COURRIER, CANAL_DIRECT]
 
 STATUTS = ["Reçu", "En cours", "En attente", "Traité / Clôturé", "Archivé"]
 STATUTS_CLOS = {"Traité / Clôturé", "Archivé"}

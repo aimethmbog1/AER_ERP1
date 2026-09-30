@@ -32,6 +32,12 @@ with st.expander("ℹ️ Deux réserves honnêtes sur cette structure", expanded
 - Les 4 chefs d'antenne régionale sont positionnés au même palier hiérarchique que les directeurs de
   département **pour les besoins du routage des dossiers**, conformément à l'usage décrit pour cette
   application — ce n'est pas nécessairement la grille indiciaire officielle de l'AER.
+- Le **Service du Courrier, de la Liaison et des Archives** a, dans le routage de cette application, un
+  droit d'acheminement vers n'importe quel poste (contrairement à tous les autres services, limités à
+  leurs subordonnés, leurs pairs et leur supérieur) — une exception assumée qui reflète la fonction réelle
+  d'un bureau d'ordre : « les dossiers entrants passent par le service courrier et celui-ci achemine vers
+  les postes concernés ». Un dossier externe arrive d'ailleurs à ce service par défaut, plutôt qu'à la
+  Direction Générale.
         """
     )
 

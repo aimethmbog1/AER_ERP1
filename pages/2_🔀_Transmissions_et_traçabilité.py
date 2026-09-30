@@ -35,6 +35,12 @@ Depuis un poste donné, un dossier ne peut être transmis qu'à :
 Impossible de sauter un niveau (ex. transmettre directement de la Direction Générale à un chef de
 service sans passer par le directeur concerné, sauf pour les services rattachés directement à la DG,
 qui sont ses subordonnés directs).
+
+**Exception assumée — le Service du Courrier, de la Liaison et des Archives** : conformément au circuit
+réel (« les dossiers entrants passent par le service courrier et celui-ci achemine vers les postes
+concernés »), ce service peut transmettre vers **n'importe quel poste**, quel que soit son rang. Un
+dossier externe arrive d'ailleurs par défaut à ce service (voir page Registre, section « Nouveau
+dossier ») plutôt que directement à la Direction Générale.
         """
     )
 

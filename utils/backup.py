@@ -11,6 +11,7 @@ import pandas as pd
 
 from .dossiers import REGISTER_COLUMNS, get_register, set_register
 from .transmissions import LOG_COLUMNS, get_log, set_log
+from .attachments import get_attachments, set_attachments
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict]:
@@ -27,11 +28,12 @@ def build_backup_json() -> str:
         "exporte_le": datetime.now().isoformat(timespec="seconds"),
         "registre_dossiers": _df_to_records(get_register()),
         "journal_transmissions": _df_to_records(get_log()),
+        "pieces_jointes": get_attachments(),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def restore_backup_json(content: str) -> tuple[int, int]:
+def restore_backup_json(content: str) -> tuple[int, int, int]:
     payload = json.loads(content)
 
     reg = pd.DataFrame(payload.get("registre_dossiers", [])).reindex(columns=REGISTER_COLUMNS)
@@ -46,4 +48,7 @@ def restore_backup_json(content: str) -> tuple[int, int]:
         log["Délai imparti (jours)"] = pd.to_numeric(log["Délai imparti (jours)"], errors="coerce")
     set_log(log)
 
-    return len(reg), len(log)
+    pieces = payload.get("pieces_jointes", {})
+    set_attachments(pieces if isinstance(pieces, dict) else {})
+
+    return len(reg), len(log), sum(len(v) for v in (pieces or {}).values())

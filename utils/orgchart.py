@@ -33,6 +33,20 @@ Réserves honnêtes conservées telles quelles :
   - La légende de l'organigramme annonce 5 Directions / 17 Sous-Directions /
     27 Services ; notre décompte à partir du texte détaillé peut différer
     légèrement (voir la page Organigramme).
+
+Exception délibérée à la règle de routage — le Service du Courrier :
+  L'utilisateur a précisé le circuit réel : « les dossiers entrants passent
+  par le service courrier et celui-ci achemine vers les postes concernés ».
+  Un bureau d'ordre / service courrier a, par nature, une fonction de
+  répartition transversale qu'aucun autre service de l'organigramme n'a : il
+  reçoit du dehors et distribue ensuite vers n'importe quel poste concerné,
+  quel que soit son rang, sans que cela corresponde à une ligne hiérarchique.
+  Le « Service du Courrier, de la Liaison et des Archives » (rattaché à la
+  Direction Générale) est donc la seule exception codée à la règle générale
+  de routage palier-par-palier : `allowed_destinations()` lui ouvre l'accès à
+  tous les postes. C'est une règle métier assumée, pas un bug ni un oubli —
+  elle est documentée ici et rappelée dans l'interface (pages Transmissions
+  et Organigramme).
 """
 from __future__ import annotations
 
@@ -40,6 +54,7 @@ from dataclasses import dataclass
 
 DIRECTION_GENERALE = "Direction Générale"
 EXTERNE = "Externe (hors AER)"
+SERVICE_COURRIER = "Service du Courrier, de la Liaison et des Archives"
 
 RANG_DG = "Direction Générale"
 RANG_DIRECTION = "Directeur / Chef d'Antenne"
@@ -248,9 +263,23 @@ def allowed_destinations(node_id: str) -> list[str]:
     les enfants directs (descente hiérarchique), les postes de même rang
     (transmission latérale entre pairs), le supérieur hiérarchique direct
     (remontée / retour), et l'extérieur (tout poste peut correspondre avec
-    l'extérieur de l'AER)."""
+    l'extérieur de l'AER).
+
+    Deux exceptions assumées, pour refléter le circuit réel décrit par
+    l'utilisateur (« les dossiers entrants passent par le service courrier
+    et celui-ci achemine vers les postes concernés ») :
+      - depuis l'extérieur, un dossier entrant arrive normalement au
+        Service du Courrier (bureau d'ordre), et non directement à la
+        Direction Générale — la DG reste une destination possible pour un
+        pli qui lui serait explicitement adressé ;
+      - depuis le Service du Courrier, un dossier peut être acheminé vers
+        n'importe quel poste concerné, quel que soit son rang (fonction de
+        répartition transversale d'un bureau d'ordre), et non selon la
+        règle générale de descente palier par palier."""
     if node_id == EXTERNE:
-        return [DIRECTION_GENERALE]
+        return sorted([SERVICE_COURRIER, DIRECTION_GENERALE])
+    if node_id == SERVICE_COURRIER:
+        return sorted(set(NODES.keys()) - {node_id})
     n = NODES.get(node_id)
     if n is None:
         return []
