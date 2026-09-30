@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+TEST1/
+.agents/
+.claude/
