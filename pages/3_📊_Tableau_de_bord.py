@@ -5,15 +5,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, STATUT_COLORS, render_sidebar_footer
+from utils.ui import (
+    PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, STATUT_COLORS,
+    render_sidebar_footer, render_page_header,
+)
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.transmissions import get_log, temps_par_service
 
 st.set_page_config(page_title="Tableau de bord — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
-st.title("📊 Tableau de bord")
-st.caption("Indicateurs calculés uniquement à partir des dossiers et transmissions saisis.")
+render_page_header("📊", "Tableau de bord",
+                    "Indicateurs calculés uniquement à partir des dossiers et transmissions saisis.")
 
 register = with_derived_columns(get_register())
 
@@ -34,10 +37,10 @@ kpi_row([
     ("En retard", str(nb_retard), None),
     ("Échéance proche (≤3j)", str(nb_proche), None),
     ("Taux de retard (parmi actifs)", f"{taux_retard:,.1f} %", None),
-])
+], icons=["📁", "🗂️", "🔴", "🟡", "📈"])
 kpi_row([
     ("Délai moyen de clôture (jours)", f"{delai_moyen:,.1f}" if pd.notna(delai_moyen) else "—", None),
-])
+], icons=["⏱️"])
 
 st.write("")
 c1, c2 = st.columns(2)

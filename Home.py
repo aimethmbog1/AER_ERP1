@@ -2,7 +2,10 @@ from datetime import date
 
 import streamlit as st
 
-from utils.ui import APP_TITLE, PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer
+from utils.ui import (
+    APP_TITLE, APP_SUBTITLE, PAGE_ICON, inject_base_style, section_title, kpi_row,
+    render_sidebar_footer, render_page_header,
+)
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.transmissions import get_log
 from utils.session import current_post_selector
@@ -13,8 +16,7 @@ inject_base_style()
 
 poste_courant = current_post_selector()
 
-st.title(f"{PAGE_ICON} {APP_TITLE}")
-st.caption("Prototype de digitalisation du suivi des dossiers — Agence de l'Électrification Rurale (AER)")
+render_page_header(PAGE_ICON, APP_TITLE, APP_SUBTITLE)
 
 with st.expander("ℹ️ À propos de cette application — à lire avant de l'utiliser", expanded=False):
     st.markdown(
@@ -85,7 +87,7 @@ else:
         ("En retard", str(nb_retard), None),
         ("Traités / archivés", str(nb_clos), None),
         ("Mouvements enregistrés", str(len(log)), None),
-    ])
+    ], icons=["📁", "🗂️", "🔴", "✅", "🔁"])
 
     st.write("")
     st.markdown("**Dossiers en retard** (échéance dépassée, non clôturés)")

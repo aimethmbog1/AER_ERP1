@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer
+from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import get_register, with_derived_columns, CANAL_COURRIER
 from utils.transmissions import get_log
 from utils.session import current_post_selector
@@ -13,7 +13,9 @@ inject_base_style()
 
 poste_courant = current_post_selector()
 
-st.title("🔍 Recherche & registre du courrier")
+render_page_header("🔍", "Recherche & registre du courrier",
+                    "Recherche plein texte et registre chronologique du courrier — implémentés "
+                    "nativement, sans connexion à Maarch ni à un autre système externe.")
 st.caption(
     "Deux fonctions inspirées de ce que propose Maarch Courrier (recherche plein texte, registre "
     "chronologique du courrier) — mais **implémentées nativement ici, sans aucune connexion à Maarch ni à "
@@ -55,7 +57,7 @@ else:
     kpi_row([
         ("Dossiers correspondants", str(len(matches_reg)), None),
         ("Transmissions correspondantes", str(len(matches_log)), None),
-    ])
+    ], icons=["📁", "🔀"])
 
     if not matches_reg.empty:
         st.markdown("**Dossiers**")

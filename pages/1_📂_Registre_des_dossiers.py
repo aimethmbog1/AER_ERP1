@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer
+from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import (
     get_register, set_register, next_dossier_id, with_derived_columns,
     REGISTER_COLUMNS, TYPES_DOSSIER, STATUTS, PRIORITES,
@@ -21,9 +21,9 @@ inject_base_style()
 
 poste_courant = current_post_selector()
 
-st.title("📂 Registre des dossiers")
-st.caption("Registre unique et centralisé — pensé pour remplacer les tableaux Excel/Word dispersés "
-           "identifiés dans le diagnostic.")
+render_page_header("📂", "Registre des dossiers",
+                    "Registre unique et centralisé — pensé pour remplacer les tableaux Excel/Word "
+                    "dispersés identifiés dans le diagnostic.")
 
 POSTE_OPTIONS = all_node_ids()
 POSTE_LABELS = {p: ("— " * depth_of(p)) + p + f"  ·  {NODES[p].rang}" for p in POSTE_OPTIONS}
@@ -186,7 +186,7 @@ else:
     kpi_row([
         ("Dossiers affichés", str(len(view)), None),
         ("Total registre", str(len(register)), None),
-    ])
+    ], icons=["📁", "🗄️"])
 
     edited = st.data_editor(
         view,

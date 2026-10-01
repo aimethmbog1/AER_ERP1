@@ -4,7 +4,10 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, NAVY, RED, AMBER, GREEN, render_sidebar_footer
+from utils.ui import (
+    PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, NAVY, RED, AMBER, GREEN,
+    render_sidebar_footer, render_page_header,
+)
 from utils.dossiers import get_register, set_register
 from utils.transmissions import (
     get_log, set_log, add_transmission, history_for, temps_par_service,
@@ -18,9 +21,9 @@ inject_base_style()
 
 poste_courant = current_post_selector()
 
-st.title("🔀 Transmissions & traçabilité")
-st.caption("Le journal des mouvements d'un dossier entre services, avec un routage contraint par "
-           "l'organigramme réel — la traçabilité que le diagnostic identifie comme manquante.")
+render_page_header("🔀", "Transmissions & traçabilité",
+                    "Journal des mouvements d'un dossier entre services, avec un routage contraint par "
+                    "l'organigramme réel — la traçabilité que le diagnostic identifie comme manquante.")
 
 with st.expander("ℹ️ Règle de routage appliquée", expanded=False):
     st.markdown(

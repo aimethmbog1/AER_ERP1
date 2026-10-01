@@ -2,7 +2,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, plotly_base_layout, GREEN, AMBER, RED, GREY, render_sidebar_footer
+from utils.ui import (
+    PAGE_ICON, inject_base_style, section_title, plotly_base_layout, GREEN, AMBER, RED, GREY,
+    render_sidebar_footer, render_page_header,
+)
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.orgchart import (
     hierarchy_rows, all_directions, sous_directions_for, services_for,
@@ -13,9 +16,9 @@ from utils.orgchart import (
 st.set_page_config(page_title="Organigramme — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
-st.title("🏢 Organigramme de l'AER")
-st.caption("Structure réelle utilisée pour le routage des dossiers — d'après l'organigramme officiel "
-           "« AER 2025 » et le descriptif du fonctionnement des directions fourni.")
+render_page_header("🏢", "Organigramme de l'AER",
+                    "Structure réelle utilisée pour le routage des dossiers — d'après l'organigramme "
+                    "officiel « AER 2025 » et le descriptif du fonctionnement des directions fourni.")
 
 with st.expander("ℹ️ Deux réserves honnêtes sur cette structure", expanded=False):
     st.markdown(
