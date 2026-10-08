@@ -4,8 +4,8 @@ import pandas as pd
 import streamlit as st
 
 from utils.ui import (
-    APP_TITLE, APP_SUBTITLE, PAGE_ICON, inject_base_style, section_title, kpi_row,
-    render_sidebar_footer, render_page_header,
+    APP_TITLE, APP_SUBTITLE, inject_base_style, section_title, kpi_row,
+    render_sidebar_footer, render_page_header, live_dot, theme_palette,
 )
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.transmissions import get_log
@@ -13,12 +13,11 @@ from utils.session import current_post_selector
 from utils.backup import build_backup_json, restore_backup_json
 from utils.exports import build_excel_export
 
-st.set_page_config(page_title=APP_TITLE, page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
 poste_courant = current_post_selector()
 
-render_page_header(PAGE_ICON, APP_TITLE, APP_SUBTITLE)
+render_page_header("🏠", APP_TITLE, APP_SUBTITLE)
 
 with st.expander("ℹ️ À propos de cette application — à lire avant de l'utiliser", expanded=False):
     st.markdown(
@@ -45,8 +44,9 @@ conséquences des difficultés de traçabilité, des retards de traitement, une 
 - Une simulation de poste (barre latérale) pour filtrer l'affichage sur « mes » dossiers.
 
 **Ce que l'outil n'est pas :**
-- Un accès à de vrais dossiers de l'AER : aucune donnée n'est préchargée — c'est un **prototype à
-  alimenter**.
+- Un accès à de vrais dossiers de l'AER : les 300 dossiers visibles au premier démarrage sont un
+  **jeu de démonstration réaliste**, pas de vraies archives — voir la page **Paramètres & thème** pour
+  repartir d'une base vide si vous préférez.
 - Une connexion réelle à AIGLES, PATRIMOINE, SYSTAC/SYGMA, SIGEC ou Maarch Courrier : ces systèmes de
   l'État camerounais ne sont ni accessibles ni interrogés par cette application. Elle s'en inspire pour
   certaines fonctions génériques et honnêtement réalisables (registre du courrier, recherche plein texte,
@@ -54,8 +54,9 @@ conséquences des difficultés de traçabilité, des retards de traitement, une 
   détail de cette distinction.
 - Un système avec authentification réelle : le sélecteur de poste est une commodité d'usage, pas un
   contrôle d'accès.
-- Une base de données persistante entre sessions : **exportez une sauvegarde complète (JSON)** ci-dessous
-  avant de fermer, et rechargez-la à la reprise.
+- Un système multi-serveurs : les données sont partagées entre tous les utilisateurs connectés au **même**
+  serveur (voir `utils/db.py`) ; exportez une sauvegarde JSON ci-dessous si votre hébergement ne garantit
+  pas un disque persistant (c'est le cas de Streamlit Community Cloud).
         """
     )
 
@@ -71,18 +72,20 @@ if not register.empty:
     if nb_proche_total:
         st.warning(f"⏳ {nb_proche_total} dossier(s) arrivent à échéance dans 3 jours ou moins.")
 
-section_title("VUE D'ENSEMBLE" + (f" — POSTE : {poste_courant}" if poste_courant else ""))
+section_title(("VUE D'ENSEMBLE" + (f" — POSTE : {poste_courant}" if poste_courant else "")))
 view = register
 if poste_courant:
     view = register[register["Service destinataire actuel"] == poste_courant]
 
 if register.empty:
-    st.info("Aucun dossier enregistré pour l'instant. Rendez-vous sur la page **📂 Registre des dossiers** "
+    st.info("Aucun dossier enregistré pour l'instant. Rendez-vous sur la page **Registre des dossiers** "
             "pour commencer à en ajouter, ou restaurez une sauvegarde JSON ci-dessous.")
 else:
     nb_actifs = int((~view["Statut"].isin(STATUTS_CLOS)).sum())
     nb_retard = int(view["En retard"].sum())
     nb_clos = int(view["Statut"].isin(STATUTS_CLOS).sum())
+    st.markdown(f"{live_dot()}<span style='font-size:0.85rem;color:{theme_palette()['text_muted']};'>"
+                "Indicateurs calculés en direct à partir du registre partagé</span>", unsafe_allow_html=True)
     kpi_row([
         ("Dossiers" + (" à ce poste" if poste_courant else " au total"), str(len(view)), None),
         ("Dossiers actifs", str(nb_actifs), None),
@@ -101,7 +104,13 @@ else:
             retard_view[["N° dossier", "Objet", "Direction concernée", "Service destinataire actuel",
                          "Statut", "Échéance prévue", "Jours de retard", "Agent en charge"]],
             width='stretch', hide_index=True,
-            column_config={"Échéance prévue": st.column_config.DateColumn("Échéance prévue")},
+            column_config={
+                "Échéance prévue": st.column_config.DateColumn("Échéance prévue"),
+                "Jours de retard": st.column_config.ProgressColumn(
+                    "Jours de retard", min_value=0,
+                    max_value=max(1, int(retard_view["Jours de retard"].max())), format="%d j",
+                ),
+            },
         )
 
     st.write("")
@@ -126,9 +135,9 @@ else:
 
 st.write("")
 st.markdown(
-    "Naviguez via le menu de gauche : **📂 Registre des dossiers** (saisie et suivi), "
-    "**🔀 Transmissions & traçabilité** (mouvements entre services, graphe avec voyants), "
-    "**📊 Tableau de bord** (indicateurs), **🏢 Organigramme** (référentiel des services)."
+    "Naviguez via le menu de gauche : **Registre des dossiers** (saisie et suivi), "
+    "**Transmissions & traçabilité** (mouvements entre services, graphe avec voyants), "
+    "**Tableau de bord** (indicateurs), **Organigramme** (référentiel des services)."
 )
 
 st.write("")
@@ -157,12 +166,31 @@ with bc1:
 with bc2:
     up = st.file_uploader("📤 Restaurer une sauvegarde (JSON)", type=["json"], key="backup_upload")
     if up is not None:
-        if st.button("Restaurer cette sauvegarde (remplace les données actuelles)"):
+        if st.button("Restaurer cette sauvegarde (remplace les données actuelles)", type="primary"):
+            st.session_state["_pending_restore"] = up.getvalue().decode("utf-8")
+            st.rerun()
+
+if st.session_state.get("_pending_restore"):
+    @st.dialog("Confirmer la restauration")
+    def _confirm_restore():
+        st.warning("Cette action **remplace intégralement** le registre, le journal des transmissions et "
+                   "les pièces jointes actuels par le contenu du fichier chargé. Cette opération est "
+                   "irréversible (sauf à restaurer une sauvegarde plus récente par la suite).")
+        cc1, cc2 = st.columns(2)
+        if cc1.button("Oui, remplacer les données", type="primary", width='stretch'):
             try:
-                n_reg, n_log, n_pj = restore_backup_json(up.getvalue().decode("utf-8"))
-                st.success(f"Restauré : {n_reg} dossier(s), {n_log} transmission(s), {n_pj} pièce(s) jointe(s).")
+                n_reg, n_log, n_pj = restore_backup_json(st.session_state.pop("_pending_restore"))
+                st.toast(f"Restauré : {n_reg} dossier(s), {n_log} transmission(s), {n_pj} pièce(s) jointe(s).",
+                         icon="✅")
+                st.balloons()
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
+                st.session_state.pop("_pending_restore", None)
                 st.error(f"Fichier de sauvegarde illisible : {exc}")
+        if cc2.button("Annuler", width='stretch'):
+            st.session_state.pop("_pending_restore", None)
+            st.rerun()
+
+    _confirm_restore()
 
 render_sidebar_footer()

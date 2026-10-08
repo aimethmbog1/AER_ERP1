@@ -3,8 +3,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from utils.ui import (
-    PAGE_ICON, inject_base_style, section_title, plotly_base_layout, GREEN, AMBER, RED, GREY,
-    render_sidebar_footer, render_page_header,
+    inject_base_style, section_title, plotly_base_layout, theme_palette,
+    render_sidebar_footer, render_page_header, live_dot,
 )
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.orgchart import (
@@ -13,7 +13,6 @@ from utils.orgchart import (
     DIRECTION_GENERALE, NODES, all_node_ids, compute_tree_layout, children_of,
 )
 
-st.set_page_config(page_title="Organigramme — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
 render_page_header("🏢", "Organigramme de l'AER",
@@ -47,12 +46,15 @@ with st.expander("ℹ️ Deux réserves honnêtes sur cette structure", expanded
 # =====================================================================
 # Graphe organigramme avec voyants de statut en temps réel
 # =====================================================================
-section_title("🚦 GRAPHE ORGANIGRAMME — VOYANTS DE STATUT EN TEMPS RÉEL")
+_p0_muted = theme_palette()["text_muted"]
+st.markdown(f"{live_dot()}<span style='font-size:0.85rem;color:{_p0_muted};'>"
+            "Graphe recalculé en direct à chaque chargement</span>", unsafe_allow_html=True)
+section_title("GRAPHE ORGANIGRAMME — VOYANTS DE STATUT EN TEMPS RÉEL")
 st.caption(
     "Chaque poste est colorié selon les dossiers qui s'y trouvent **actuellement** (colonne "
-    "« Service destinataire actuel » du registre) : 🔴 rouge si au moins un dossier y est en retard, "
-    "🟡 jaune si un dossier approche de son échéance (≤ 3 jours) sans être en retard, 🟢 vert si tous "
-    "les dossiers présents sont dans les délais, ⚪ gris si aucun dossier n'y est actuellement."
+    "« Service destinataire actuel » du registre) : rouge si au moins un dossier y est en retard, "
+    "jaune si un dossier approche de son échéance (≤ 3 jours) sans être en retard, vert si tous "
+    "les dossiers présents sont dans les délais, gris si aucun dossier n'y est actuellement."
 )
 
 register = with_derived_columns(get_register())
@@ -77,7 +79,8 @@ else:
         status_by_node[node_id] = "grey"
         count_by_node[node_id] = 0
 
-COLOR_MAP = {"red": RED, "yellow": AMBER, "green": GREEN, "grey": "#C8CDD3"}
+p = theme_palette()
+COLOR_MAP = {"red": p["red"], "yellow": p["amber"], "green": p["green"], "grey": p["grey_light"]}
 
 positions = compute_tree_layout()
 
@@ -103,16 +106,16 @@ node_hover = [
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines",
-                          line=dict(color="rgba(31,56,100,0.25)", width=1.2), hoverinfo="skip",
+                          line=dict(color="rgba(130,150,170,0.35)", width=1.2), hoverinfo="skip",
                           showlegend=False))
 fig.add_trace(go.Scatter(
     x=node_x, y=node_y, mode="markers+text",
-    marker=dict(size=node_size, color=node_color, line=dict(color="white", width=1.5)),
-    text=node_text, textposition="bottom center", textfont=dict(size=9),
+    marker=dict(size=node_size, color=node_color, line=dict(color=p["surface"], width=1.5)),
+    text=node_text, textposition="bottom center", textfont=dict(size=9, color=p["text"]),
     hovertext=node_hover, hoverinfo="text", showlegend=False,
 ))
-for label, color in [("🔴 En retard", RED), ("🟡 Échéance proche", AMBER),
-                     ("🟢 Dans les délais", GREEN), ("⚪ Aucun dossier", "#C8CDD3")]:
+for label, color in [("En retard", p["red"]), ("Échéance proche", p["amber"]),
+                     ("Dans les délais", p["green"]), ("Aucun dossier", p["grey_light"])]:
     fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers",
                               marker=dict(size=12, color=color), name=label))
 fig.update_layout(title="Organigramme AER — voyants de statut par poste", showlegend=True)

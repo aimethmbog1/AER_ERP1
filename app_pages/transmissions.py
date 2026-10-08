@@ -5,8 +5,8 @@ import plotly.express as px
 import streamlit as st
 
 from utils.ui import (
-    PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, NAVY, RED, AMBER, GREEN,
-    render_sidebar_footer, render_page_header,
+    inject_base_style, section_title, plotly_base_layout, theme_palette,
+    render_sidebar_footer, render_page_header, status_badge,
 )
 from utils.dossiers import get_register, update_service_destinataire
 from utils.transmissions import (
@@ -17,7 +17,6 @@ from utils.orgchart import allowed_destinations, all_node_ids, depth_of, NODES
 from utils.session import current_post_selector
 from utils import db
 
-st.set_page_config(page_title="Transmissions & traçabilité — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
 poste_courant = current_post_selector()
@@ -51,7 +50,7 @@ dossier ») plutôt que directement à la Direction Générale.
 register = get_register()
 
 if register.empty:
-    st.info("Enregistrez d'abord au moins un dossier sur la page **📂 Registre des dossiers** avant de "
+    st.info("Enregistrez d'abord au moins un dossier sur la page **Registre des dossiers** avant de "
             "pouvoir tracer ses transmissions.")
     st.stop()
 
@@ -67,7 +66,8 @@ with st.container(border=True):
     dossier_row = register[register["N° dossier"] == dossier_id].iloc[0]
     poste_actuel_dossier = dossier_row["Service destinataire actuel"]
 
-    st.caption(f"Poste actuel de ce dossier : **{poste_actuel_dossier}**")
+    st.markdown(f"Poste actuel de ce dossier : **{poste_actuel_dossier}**  "
+                f"{status_badge(dossier_row['Statut'])}", unsafe_allow_html=True)
 
     tc1, tc2 = st.columns(2)
     t_source = tc1.selectbox(
@@ -115,7 +115,7 @@ with st.container(border=True):
         )
         if ok:
             update_service_destinataire(dossier_id, t_dest)
-            st.success(message)
+            st.toast(message, icon="✅")
             st.session_state["last_bordereau"] = generer_bordereau(
                 dossier_id, dossier_row["Objet"], t_source, t_dest, t_date, t_commentaire, t_agent_dest,
             )
@@ -146,8 +146,9 @@ else:
         fin = frise.loc[i + 1, "Date"] if i + 1 < len(frise) else today
         segments.append({"Service": r["Service destination"], "Début": r["Date"], "Fin": fin, "Sens": r["Sens"]})
     seg_df = pd.DataFrame(segments)
+    p = theme_palette()
     fig = px.timeline(seg_df, x_start="Début", x_end="Fin", y="Service", color="Sens",
-                       color_discrete_map={"Aller": NAVY, "Retour": AMBER},
+                       color_discrete_map={"Aller": p["navy"], "Retour": p["amber"]},
                        title=f"Trajet du dossier {hist_id} entre services")
     fig.update_yaxes(autorange="reversed")
     fig = plotly_base_layout(fig, height=max(220, 60 * len(seg_df)))
@@ -178,7 +179,7 @@ else:
         by_service = get_log()["Service destination"].value_counts().reset_index()
         by_service.columns = ["Service", "Nombre de transmissions reçues"]
         fig = px.bar(by_service.sort_values("Nombre de transmissions reçues", ascending=False).head(15),
-                     x="Service", y="Nombre de transmissions reçues", color_discrete_sequence=[NAVY],
+                     x="Service", y="Nombre de transmissions reçues", color_discrete_sequence=[theme_palette()["navy"]],
                      title="Postes les plus sollicités (nombre de dossiers reçus)")
         fig = plotly_base_layout(fig, legend=False)
         fig.update_xaxes(tickangle=-35)
@@ -200,7 +201,8 @@ else:
         c1, c2 = st.columns(2)
         with c1:
             fig = px.bar(moy.head(15), x="Service", y="Jours passés en moyenne",
-                         color_discrete_sequence=[AMBER], title="Délai moyen de traitement par service (jours)")
+                         color_discrete_sequence=[theme_palette()["amber"]],
+                         title="Délai moyen de traitement par service (jours)")
             fig = plotly_base_layout(fig, legend=False)
             fig.update_xaxes(tickangle=-35)
             st.plotly_chart(fig, width='stretch')

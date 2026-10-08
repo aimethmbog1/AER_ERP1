@@ -1,196 +1,272 @@
-"""Composants d'interface et thème partagés par toutes les pages.
+"""Design system AER — v3 (« la plus professionnelle »).
 
-Thème « GED professionnelle » (inspiré des codes visuels des logiciels de
-gestion documentaire d'entreprise type OpenKM / Maarch Courrier : barre
-latérale sombre, cartes avec ombre discrète, badges de statut, typographie
-sans-serif nette) — appliqué uniquement via CSS, sans dépendance externe,
-pour rester 100% Streamlit natif et déployable tel quel."""
+Changement de philosophie par rapport à la v2 : le thème (couleurs, police,
+rayons, bordures) vient désormais de `.streamlit/config.toml`
+([theme]/[theme.light]/[theme.dark]/[theme.sidebar]), qui gère nativement le
+clair/sombre (menu ⋮ → Settings → Choose app theme) — ce n'est plus du CSS
+qui le fait. Le CSS qui reste ici est un recours volontaire et restreint à
+ce que le thème ne couvre pas : le dégradé de marque de la barre latérale,
+le bandeau d'en-tête avec emblème, les badges de statut multicolores (le
+thème ne connaît que 7 couleurs nommées), et la couche d'animations/
+micro-interactions demandée explicitement par l'utilisateur. Chaque bloc CSS
+lit les couleurs actives via `st.context.theme` pour rester synchronisé avec
+le thème choisi, au lieu de dupliquer une palette figée.
+
+Emblème : aucun logo officiel de l'AER n'a pu être trouvé/téléchargé en ligne
+(voir le message envoyé à l'utilisateur) ; `assets/aer_emblem.svg` et
+`assets/aer_wordmark.svg` sont un lockup ORIGINAL créé pour ce prototype, à
+remplacer dès qu'un fichier officiel sera fourni (changez simplement
+`BRAND_ICON`/`BRAND_LOGO` ci-dessous — le reste de l'app n'a rien à savoir)."""
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
-PAGE_ICON = "📂"
+PAGE_ICON = ":material/folder_managed:"
 APP_TITLE = "Suivi des dossiers — AER"
 APP_SUBTITLE = "Agence de l'Électrification Rurale · Gestion documentaire & traçabilité"
 
-# ---------------------------------------------------------------------------
-# Palette — bleu institutionnel + accent sobre, sur fond neutre clair
-# ---------------------------------------------------------------------------
-NAVY = "#0B3D62"        # bleu institutionnel profond (marque, sidebar, titres)
-NAVY_DARK = "#082A46"   # variante plus sombre (sidebar, hover)
-BLUE = "#2E6DA4"        # bleu d'accent (liens, actions secondaires)
-ACCENT = "#0E8FA3"      # teal d'accent (highlights, icônes actives)
-GOLD = "#C9A24B"
-RED = "#C0392B"
-GREEN = "#1E8449"
-AMBER = "#B8750A"
-GREY = "#6B7280"
-GREY_LIGHT = "#E5E8EC"
-BG = "#F4F6F8"          # fond général de page
-SURFACE = "#FFFFFF"     # fond des cartes
-BORDER = "#E2E6EA"
-TEXT = "#1C2733"
-TEXT_MUTED = "#5B6672"
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+BRAND_ICON = str(ASSETS_DIR / "aer_emblem.svg")
+BRAND_LOGO = str(ASSETS_DIR / "aer_wordmark.svg")
 
-CATEGORICAL = [NAVY, ACCENT, GOLD, GREEN, RED, AMBER, GREY, BLUE]
+# ---------------------------------------------------------------------------
+# Palette de référence (identique à .streamlit/config.toml) — utilisée pour
+# les éléments que le thème Streamlit ne pilote pas lui-même : les figures
+# Plotly (qui veulent des couleurs littérales) et les badges de statut
+# multicolores. `theme_palette()` ci-dessous choisit entre les deux jeux
+# selon le thème actif.
+# ---------------------------------------------------------------------------
+_LIGHT = dict(
+    navy="#0B3D62", navy_dark="#082A46", blue="#2E6DA4", accent="#0E8FA3", gold="#C9A24B",
+    red="#C0392B", green="#1E8449", amber="#B8750A", grey="#6B7280", grey_light="#E5E8EC",
+    bg="#F4F6F8", surface="#FFFFFF", border="#E2E6EA", text="#1C2733", text_muted="#5B6672",
+)
+_DARK = dict(
+    navy="#5B9BD5", navy_dark="#0A1620", blue="#5B9BD5", accent="#2BB9CF", gold="#E3C26B",
+    red="#E6684F", green="#4FBE7E", amber="#E0A23D", grey="#9AA5B1", grey_light="#22333F",
+    bg="#0A1620", surface="#11212E", border="#22333F", text="#E7EEF5", text_muted="#9AA5B1",
+)
 
-STATUT_COLORS = {
-    "Reçu": BLUE,
-    "En cours": GOLD,
-    "En attente": AMBER,
-    "Traité / Clôturé": GREEN,
-    "Archivé": GREY,
+# Rétro-compatibilité : constantes historiques utilisées par endroits dans
+# les pages existantes (toujours la variante claire — l'essentiel de ce
+# fichier est passé à `theme_palette()`, qui est theme-aware).
+NAVY, NAVY_DARK, BLUE, ACCENT, GOLD = (_LIGHT[k] for k in ("navy", "navy_dark", "blue", "accent", "gold"))
+RED, GREEN, AMBER, GREY, GREY_LIGHT = (_LIGHT[k] for k in ("red", "green", "amber", "grey", "grey_light"))
+BG, SURFACE, BORDER, TEXT, TEXT_MUTED = (_LIGHT[k] for k in ("bg", "surface", "border", "text", "text_muted"))
+
+
+def is_dark_theme() -> bool:
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:
+        return False
+
+
+def theme_palette() -> dict:
+    """Palette littérale (hex) adaptée au thème clair/sombre actif —
+    utilisée par les figures Plotly et les badges, que le thème Streamlit
+    ne recolore pas automatiquement lui-même."""
+    return dict(_DARK if is_dark_theme() else _LIGHT)
+
+
+CATEGORICAL_LIGHT = [_LIGHT[k] for k in ("navy", "accent", "gold", "green", "red", "amber", "grey", "blue")]
+CATEGORICAL_DARK = [_DARK[k] for k in ("blue", "accent", "gold", "green", "red", "amber", "grey", "navy")]
+CATEGORICAL = CATEGORICAL_LIGHT  # rétro-compatibilité (code appelant qui importerait la constante)
+
+
+def categorical_colors() -> list[str]:
+    return CATEGORICAL_DARK if is_dark_theme() else CATEGORICAL_LIGHT
+
+
+def status_colors() -> dict:
+    p = theme_palette()
+    return {
+        "Reçu": p["blue"],
+        "En cours": p["gold"],
+        "En attente": p["amber"],
+        "Traité / Clôturé": p["green"],
+        "Archivé": p["grey"],
+    }
+
+
+STATUT_COLORS = status_colors  # certaines pages appellent STATUT_COLORS[...] ; voir status_badge()
+
+# Couleurs "nommées" du thème (st.badge n'accepte que ce jeu fixe) pour les
+# endroits où un badge natif suffit et où la couleur exacte importe moins
+# que la cohérence avec le reste de l'app.
+STATUT_BADGE_NATIF = {
+    "Reçu": "blue",
+    "En cours": "orange",
+    "En attente": "orange",
+    "Traité / Clôturé": "green",
+    "Archivé": "gray",
 }
 
 
+# ---------------------------------------------------------------------------
+# Couche CSS — volontairement restreinte (voir le docstring du module)
+# ---------------------------------------------------------------------------
 def inject_base_style():
+    p = theme_palette()
+    dark = is_dark_theme()
+    sidebar_grad_top = "#0E4A74" if not dark else "#0C1D2B"
+    sidebar_grad_bottom = "#082A46" if not dark else "#061019"
+
     css = f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        html, body, [class*="css"] {{
-            font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-        }}
-
-        /* ---------- Fond général ---------- */
-        .stApp {{ background: {BG}; }}
-        .block-container {{ padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1360px; }}
-
-        /* ---------- Barre latérale — look "console GED" ---------- */
+        /* ====================================================================
+           1) Bandeau de marque + dégradé de la barre latérale
+           (le thème config.toml pose une couleur plate ; le dégradé et
+           l'emblème sont la seule touche de style de marque ajoutée ici) */
         section[data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, {NAVY} 0%, {NAVY_DARK} 100%);
+            background: linear-gradient(180deg, {sidebar_grad_top} 0%, {sidebar_grad_bottom} 100%) !important;
         }}
-        section[data-testid="stSidebar"] * {{ color: #EAF1F8 !important; }}
-        section[data-testid="stSidebar"] .stSelectbox label,
-        section[data-testid="stSidebar"] .stMarkdown p {{ color: #CBD9E6 !important; }}
-        section[data-testid="stSidebar"] [data-baseweb="select"] > div {{
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 8px;
-        }}
-        section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,0.15); }}
-        section[data-testid="stSidebarNav"] {{
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-            padding-bottom: 0.6rem;
-            margin-bottom: 0.4rem;
-        }}
-        section[data-testid="stSidebarNav"] a {{
-            border-radius: 8px;
-            margin: 1px 6px;
-        }}
-        section[data-testid="stSidebarNav"] a:hover {{ background: rgba(255,255,255,0.10); }}
-        section[data-testid="stSidebarNav"] a[aria-current="page"] {{
-            background: rgba(255,255,255,0.16);
-            font-weight: 600;
+        [data-testid="stSidebarHeader"] {{ padding-top: 0.6rem; }}
+        [data-testid="stSidebarHeader"] img {{
+            border-radius: 10px;
+            animation: aer-fade-in 0.5s ease both;
         }}
 
-        /* ---------- Titres ---------- */
-        h1, h2, h3 {{ color: {NAVY}; font-weight: 700; letter-spacing: -0.01em; }}
-        p, li, span, label {{ color: {TEXT}; }}
-
-        /* ---------- Metrics (fallback) ---------- */
-        [data-testid="stMetricValue"] {{ font-size: 1.55rem; color: {NAVY}; font-weight: 700; }}
-        [data-testid="stMetricLabel"] {{ font-weight: 600; letter-spacing: .01em; color: {TEXT_MUTED}; }}
-
-        /* ---------- Bannière de section (en-tête de bloc) ---------- */
-        .aer-section-title {{
-            background: {SURFACE}; color: {NAVY}; font-weight: 700; font-size: 0.95rem;
-            text-transform: uppercase; letter-spacing: 0.04em;
-            padding: 0.6rem 1rem; border-left: 4px solid {ACCENT};
-            border-radius: 6px; margin: 1.1rem 0 0.9rem 0;
-            box-shadow: 0 1px 3px rgba(16,24,40,0.06);
-        }}
-
-        /* ---------- En-tête de page ---------- */
+        /* ====================================================================
+           2) En-tête de page (icône sur pastille + titre + sous-titre) */
         .aer-page-header {{
             display: flex; align-items: center; gap: 0.9rem;
-            background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
-            padding: 1.1rem 1.4rem; margin-bottom: 1.1rem;
-            box-shadow: 0 1px 4px rgba(16,24,40,0.05);
+            background: {p['surface']}; border: 1px solid {p['border']}; border-radius: 14px;
+            padding: 1.05rem 1.35rem; margin-bottom: 1.1rem;
+            box-shadow: 0 1px 4px rgba(16,24,40,0.06);
+            animation: aer-slide-up 0.45s cubic-bezier(.2,.8,.2,1) both;
         }}
         .aer-page-header .aer-icon {{
-            font-size: 1.9rem; width: 52px; height: 52px; min-width: 52px;
-            display: flex; align-items: center; justify-content: center;
-            background: {NAVY}; border-radius: 10px;
+            font-size: 1.55rem; width: 50px; height: 50px; min-width: 50px;
+            display: flex; align-items: center; justify-content: center; color: white;
+            background: linear-gradient(135deg, {p['navy']}, {p['accent']}); border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(14,143,163,0.35);
+            overflow: hidden; white-space: nowrap;
         }}
         .aer-page-header .aer-titles h1 {{
-            font-size: 1.35rem; margin: 0; color: {NAVY}; line-height: 1.25;
+            font-size: 1.32rem; margin: 0; color: {p['navy']}; line-height: 1.25; font-weight: 800;
         }}
-        .aer-page-header .aer-titles p {{
-            margin: 0.1rem 0 0 0; color: {TEXT_MUTED}; font-size: 0.9rem;
+        .aer-page-header .aer-titles p {{ margin: 0.15rem 0 0 0; color: {p['text_muted']}; font-size: 0.9rem; }}
+
+        /* ====================================================================
+           3) Bannière de section */
+        .aer-section-title {{
+            background: {p['surface']}; color: {p['navy']}; font-weight: 700; font-size: 0.92rem;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 0.55rem 1rem; border-left: 4px solid {p['accent']};
+            border-radius: 8px; margin: 1.1rem 0 0.9rem 0;
+            box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+            animation: aer-fade-in 0.4s ease both;
         }}
 
-        /* ---------- Badges de statut (pilules) ---------- */
+        /* ====================================================================
+           4) Badges de statut (pilule colorée — le thème ne propose que 7
+              couleurs nommées, insuffisant pour les 5 statuts distincts) */
         .aer-badge {{
             display: inline-flex; align-items: center; gap: 0.35rem;
             padding: 0.22rem 0.7rem; border-radius: 999px;
             font-size: 0.76rem; font-weight: 700; color: white;
-            box-shadow: 0 1px 2px rgba(16,24,40,0.12);
+            box-shadow: 0 1px 2px rgba(16,24,40,0.18);
+            transition: transform 0.15s ease;
         }}
-        .aer-badge::before {{
-            content: ""; width: 6px; height: 6px; border-radius: 50%;
-            background: rgba(255,255,255,0.85);
-        }}
+        .aer-badge:hover {{ transform: translateY(-1px); }}
+        .aer-badge::before {{ content: ""; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.85); }}
+        .aer-badge.aer-pulse::before {{ animation: aer-pulse-dot 1.6s ease-in-out infinite; }}
 
-        /* ---------- Cartes KPI ---------- */
+        /* ====================================================================
+           5) Cartes KPI (utilisées ponctuellement en complément de st.metric,
+              quand une icône et un dégradé de marque apportent une vraie
+              lisibilité en plus — pas en remplacement systématique) */
         .aer-kpi-card {{
-            background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
-            padding: 0.95rem 1.1rem; box-shadow: 0 1px 4px rgba(16,24,40,0.05);
-            height: 100%;
+            background: {p['surface']}; border: 1px solid {p['border']}; border-radius: 14px;
+            padding: 0.95rem 1.1rem 1.05rem 1.1rem; box-shadow: 0 1px 4px rgba(16,24,40,0.06);
+            height: 100%; transition: transform 0.18s ease, box-shadow 0.18s ease;
+            animation: aer-slide-up 0.45s cubic-bezier(.2,.8,.2,1) both;
         }}
-        .aer-kpi-card .aer-kpi-top {{
-            display: flex; align-items: center; justify-content: space-between;
+        .aer-kpi-card:hover {{ transform: translateY(-2px); box-shadow: 0 6px 18px rgba(16,24,40,0.12); }}
+        .aer-kpi-card .aer-kpi-top {{ display: flex; align-items: center; justify-content: space-between; }}
+        .aer-kpi-card .aer-kpi-icon {{
+            font-size: 1.05rem; width: 30px; height: 30px; border-radius: 9px; opacity: 0.95;
+            display: flex; align-items: center; justify-content: center; color: white;
+            background: linear-gradient(135deg, {p['navy']}, {p['accent']});
+            overflow: hidden; white-space: nowrap;
         }}
-        .aer-kpi-card .aer-kpi-icon {{ font-size: 1.25rem; opacity: 0.85; }}
         .aer-kpi-card .aer-kpi-value {{
-            font-size: 1.7rem; font-weight: 800; color: {NAVY}; line-height: 1.15; margin-top: 0.3rem;
+            font-size: 1.75rem; font-weight: 800; color: {p['navy']}; line-height: 1.15; margin-top: 0.4rem;
         }}
         .aer-kpi-card .aer-kpi-label {{
-            font-size: 0.78rem; font-weight: 600; color: {TEXT_MUTED};
+            font-size: 0.78rem; font-weight: 600; color: {p['text_muted']};
             text-transform: uppercase; letter-spacing: 0.03em; margin-top: 0.15rem;
         }}
 
-        /* ---------- Conteneurs / cartes génériques ---------- */
-        div[data-testid="stContainer"] > div[style*="border"] {{
-            border-radius: 12px !important; border-color: {BORDER} !important;
-            box-shadow: 0 1px 4px rgba(16,24,40,0.05);
+        /* ====================================================================
+           6) Micro-interactions générales (boutons, cartes, onglets) */
+        .stButton > button, .stDownloadButton > button {{ transition: transform 0.12s ease, box-shadow 0.12s ease; }}
+        .stButton > button:hover, .stDownloadButton > button:hover {{ transform: translateY(-1px); }}
+        .stButton > button:active {{ transform: translateY(0px) scale(0.98); }}
+        div[data-testid="stMetric"] {{ transition: transform 0.18s ease; }}
+        div[data-testid="stMetric"]:hover {{ transform: translateY(-2px); }}
+        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {{ border-radius: 12px; overflow: hidden; }}
+
+        /* Apparition progressive du contenu principal au chargement de la page */
+        .block-container > div:nth-of-type(1) {{ animation: aer-fade-in 0.35s ease both; }}
+
+        /* ====================================================================
+           7) Indicateur "en direct" (pastille clignotante) */
+        .aer-live-dot {{
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            background: {p['green']}; margin-right: 0.4rem; vertical-align: middle;
+            box-shadow: 0 0 0 0 rgba(30,132,73,0.55);
+            animation: aer-live-ping 1.8s ease-out infinite;
         }}
 
-        /* ---------- Boutons ---------- */
-        .stButton > button {{
-            border-radius: 8px; font-weight: 600; border: 1px solid {BORDER};
-            transition: all 0.15s ease;
-        }}
-        .stButton > button[kind="primary"] {{
-            background: {NAVY}; border-color: {NAVY};
-        }}
-        .stButton > button[kind="primary"]:hover {{
-            background: {NAVY_DARK}; border-color: {NAVY_DARK};
-            box-shadow: 0 2px 8px rgba(11,61,98,0.35);
-        }}
-        .stDownloadButton > button {{ border-radius: 8px; font-weight: 600; }}
+        /* ====================================================================
+           8) Compteur animé (valeur KPI qui "monte" au chargement) */
+        .aer-counter {{ font-variant-numeric: tabular-nums; }}
 
-        /* ---------- Tableaux / data_editor ---------- */
-        [data-testid="stDataFrame"], [data-testid="stDataEditor"] {{
-            border-radius: 10px; overflow: hidden; border: 1px solid {BORDER};
+        /* ====================================================================
+           Keyframes */
+        @keyframes aer-fade-in {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+        @keyframes aer-slide-up {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+        @keyframes aer-pulse-dot {{ 0%, 100% {{ opacity: 0.85; }} 50% {{ opacity: 0.25; }} }}
+        @keyframes aer-live-ping {{
+            0% {{ box-shadow: 0 0 0 0 rgba(30,132,73,0.55); }}
+            70% {{ box-shadow: 0 0 0 7px rgba(30,132,73,0); }}
+            100% {{ box-shadow: 0 0 0 0 rgba(30,132,73,0); }}
         }}
-
-        /* ---------- Expanders ---------- */
-        .streamlit-expanderHeader {{
-            border-radius: 8px; font-weight: 600;
-        }}
-
-        /* ---------- Tabs ---------- */
-        .stTabs [data-baseweb="tab"] {{ font-weight: 600; }}
         </style>
     """
     st.markdown(textwrap.dedent(css), unsafe_allow_html=True)
 
 
+def render_brand_logo():
+    """Logo + nom de l'app dans la barre latérale (natif `st.logo`, donc géré
+    correctement en version réduite/étendue de la sidebar, sans CSS)."""
+    st.logo(BRAND_LOGO, icon_image=BRAND_ICON, size="large")
+
+
 def render_page_header(icon: str, title: str, subtitle: str = ""):
-    """En-tête de page uniforme : icône sur pastille marine, titre, sous-titre."""
+    """En-tête de page uniforme : icône sur pastille en dégradé, titre, sous-titre.
+
+    `icon` est un émoji (ou tout glyphe Unicode simple), PAS un nom Material
+    Symbols : une première version utilisait `:material/nom:` rendu via la
+    police « Material Symbols Outlined » chargée depuis Google Fonts dans le
+    CSS — fragile en pratique (QA visuelle : le glyphe ne s'affichait pas
+    dans cet environnement de test, le nom de l'icône s'affichant en toutes
+    lettres à la place, le réseau du bac à sable ne pouvant visiblement pas
+    atteindre fonts.googleapis.com depuis le navigateur). Un émoji, lui, vient
+    de la police à couleurs déjà installée par le système/navigateur, sans
+    aucune dépendance réseau — plus robuste pour un élément d'identité
+    visuelle central, quel que soit le réseau de l'utilisateur final. Les
+    icônes de la barre de NAVIGATION, elles, restent en `:material/...:`
+    (voir `streamlit_app.py`) : Streamlit les rend avec ses propres polices
+    embarquées dans son build JS, pas via Google Fonts — QA confirmée, elles
+    s'affichent correctement."""
     st.markdown(
         f"""
         <div class="aer-page-header">
@@ -209,65 +285,125 @@ def section_title(text: str):
     st.markdown(f'<div class="aer-section-title">{text}</div>', unsafe_allow_html=True)
 
 
-def status_badge(status: str) -> str:
-    color = STATUT_COLORS.get(status, GREY)
-    return f'<span class="aer-badge" style="background:{color}">{status}</span>'
+def status_badge(status: str, pulse: bool = False) -> str:
+    color = status_colors().get(status, theme_palette()["grey"])
+    cls = "aer-badge aer-pulse" if pulse else "aer-badge"
+    return f'<span class="{cls}" style="background:{color}">{status}</span>'
+
+
+def live_dot() -> str:
+    return '<span class="aer-live-dot"></span>'
 
 
 def plotly_base_layout(fig: go.Figure, height: int = 380, legend: bool = True) -> go.Figure:
+    p = theme_palette()
     fig.update_layout(
         height=height,
         margin=dict(l=10, r=10, t=48, b=10),
-        font=dict(family="Inter, Segoe UI, Arial, sans-serif", size=13, color=TEXT),
-        title_font=dict(size=15, color=NAVY),
+        font=dict(family="Inter, Segoe UI, Arial, sans-serif", size=13, color=p["text"]),
+        title_font=dict(size=15, color=p["navy"]),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        hoverlabel=dict(bgcolor="white", font_size=12, font_family="Inter, Segoe UI, Arial, sans-serif"),
-        colorway=CATEGORICAL,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                     font=dict(color=p["text"])),
+        hoverlabel=dict(bgcolor=p["surface"], font_size=12, font_color=p["text"],
+                        font_family="Inter, Segoe UI, Arial, sans-serif"),
+        colorway=categorical_colors(),
+        transition=dict(duration=350, easing="cubic-in-out"),
     )
-    fig.update_xaxes(showgrid=False, zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(11,61,98,0.08)", zeroline=False)
+    grid = "rgba(255,255,255,0.08)" if is_dark_theme() else "rgba(11,61,98,0.08)"
+    fig.update_xaxes(showgrid=False, zeroline=False, color=p["text_muted"])
+    fig.update_yaxes(showgrid=True, gridcolor=grid, zeroline=False, color=p["text_muted"])
     return fig
 
 
 def kpi_row(items: list[tuple[str, str, str | None]], icons: list[str] | None = None):
-    """Rangée de cartes KPI façon tableau de bord GED.
-
-    `items` garde la signature historique (label, valeur, delta) pour rester
-    compatible avec tout le code existant ; `icons` est une liste optionnelle
-    d'émojis/icônes alignée avec `items` (sinon une icône neutre est utilisée)."""
+    """Rangée de cartes KPI (identité visuelle de marque : icône en dégradé
+    navy→teal). Conservée pour les emplacements où une carte de marque
+    apporte plus qu'un `st.metric` nu (ex. Accueil) ; les tableaux de bord
+    plus denses utilisent `st.metric(border=True, chart_data=...)` natif
+    (voir pages/3)."""
     cols = st.columns(len(items))
-    default_icons = ["📁", "🟢", "⏱️", "✅", "🔁", "📊"]
+    default_icons = ["📁", "✅", "⏱️", "🗂️", "🔁", "📊"]
     for i, (col, (label, value, delta)) in enumerate(zip(cols, items)):
         icon = (icons[i] if icons and i < len(icons) else default_icons[i % len(default_icons)])
         delta_html = ""
         if delta:
-            delta_html = f'<div style="font-size:0.78rem;color:{TEXT_MUTED};margin-top:0.2rem;">{delta}</div>'
+            delta_html = (f'<div style="font-size:0.78rem;color:{theme_palette()["text_muted"]};'
+                           f'margin-top:0.25rem;">{delta}</div>')
         with col:
             st.markdown(
                 f"""
-                <div class="aer-kpi-card">
+                <div class="aer-kpi-card" style="animation-delay:{i * 60}ms">
                     <div class="aer-kpi-top">
                         <span class="aer-kpi-icon">{icon}</span>
                     </div>
-                    <div class="aer-kpi-value">{value}</div>
+                    <div class="aer-kpi-value aer-counter" data-aer-count="{_numeric_part(value)}">{value}</div>
                     <div class="aer-kpi-label">{label}</div>
                     {delta_html}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+    _inject_counter_script()
+
+
+def _numeric_part(value: str) -> str:
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    return digits or "0"
+
+
+_COUNTER_SCRIPT_DONE_KEY = "_aer_counter_script_emitted"
+
+
+def _inject_counter_script():
+    """Anime la montée en valeur des cartes KPI au premier rendu de la page.
+
+    Un `<script>` inséré via `st.markdown(unsafe_allow_html=True)` n'est
+    PAS exécuté par le navigateur (une balise <script> posée par
+    innerHTML ne s'exécute jamais — limite connue du DOM, pas de
+    Streamlit) : il faut passer par `components.v1.html`, qui rend dans un
+    vrai `<iframe>` et peut donc remonter au document parent pour trouver
+    les cartes à animer. Hauteur nulle : ce composant n'affiche rien par
+    lui-même, il ne fait qu'agir sur le DOM déjà posé par `kpi_row()`."""
+    components.html(
+        """
+        <script>
+        (function() {
+            const cards = window.parent.document.querySelectorAll('.aer-counter[data-aer-count]');
+            cards.forEach((el) => {
+                const target = parseInt(el.getAttribute('data-aer-count'), 10);
+                if (!isFinite(target) || el.dataset.aerAnimated === "1") return;
+                el.dataset.aerAnimated = "1";
+                const suffix = el.textContent.replace(/[0-9\\s]/g, '').trim();
+                const prefix = el.textContent.match(/^[^0-9]*/)[0];
+                const duration = 650;
+                const start = performance.now();
+                function step(now) {
+                    const t = Math.min(1, (now - start) / duration);
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    const val = Math.round(eased * target);
+                    el.textContent = prefix + val.toLocaleString('fr-FR') + (suffix ? ' ' + suffix : '');
+                    if (t < 1) requestAnimationFrame(step);
+                    else el.textContent = prefix + target.toLocaleString('fr-FR') + (suffix ? ' ' + suffix : '');
+                }
+                requestAnimationFrame(step);
+            });
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
 
 def render_sidebar_footer():
     st.sidebar.markdown("---")
     st.sidebar.markdown(
-        f"""
+        """
         <div style="font-size:0.72rem; color:#AFC2D4; line-height:1.4;">
             <b style="color:#EAF1F8;">AER</b> · Suivi des dossiers<br>
-            Prototype — Streamlit &amp; Plotly
+            Application pilote — Streamlit
         </div>
         """,
         unsafe_allow_html=True,

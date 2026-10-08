@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
+from utils.ui import inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import (
     get_register, set_register, add_dossier, with_derived_columns, date_echeance_warning,
     REGISTER_COLUMNS, TYPES_DOSSIER, STATUTS, PRIORITES,
@@ -16,7 +16,6 @@ from utils.attachments import (
     add_attachment, remove_attachment, list_for as attachments_for, decode as decode_attachment,
 )
 
-st.set_page_config(page_title="Registre des dossiers — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
 poste_courant = current_post_selector()
@@ -39,15 +38,31 @@ with lc:
             loaded = pd.read_csv(uploaded).reindex(columns=REGISTER_COLUMNS)
             loaded["Date de réception"] = pd.to_datetime(loaded["Date de réception"], errors="coerce")
             loaded["Échéance prévue"] = pd.to_datetime(loaded["Échéance prévue"], errors="coerce")
-            if st.button("Remplacer le registre courant par ce fichier"):
-                set_register(loaded)
-                st.success(f"{len(loaded)} dossier(s) chargé(s).")
+            if st.button("Remplacer le registre courant par ce fichier", type="primary"):
+                st.session_state["_pending_csv_import"] = loaded
                 st.rerun()
         except Exception as exc:  # noqa: BLE001
             st.error(f"Fichier illisible : {exc}")
 with rc:
     st.caption("Pour une sauvegarde complète (registre + transmissions en un seul fichier), utilisez la "
                "section dédiée sur la page d'accueil.")
+
+if isinstance(st.session_state.get("_pending_csv_import"), pd.DataFrame):
+    @st.dialog("Confirmer le remplacement du registre")
+    def _confirm_csv_import():
+        loaded_df = st.session_state["_pending_csv_import"]
+        st.warning(f"Le registre actuel ({len(get_register())} dossier(s)) sera remplacé par le contenu "
+                   f"de ce fichier ({len(loaded_df)} ligne(s)). Cette opération est irréversible.")
+        cc1, cc2 = st.columns(2)
+        if cc1.button("Oui, remplacer", type="primary", width='stretch'):
+            set_register(st.session_state.pop("_pending_csv_import"))
+            st.toast(f"{len(loaded_df)} dossier(s) chargé(s).", icon="✅")
+            st.rerun()
+        if cc2.button("Annuler", width='stretch'):
+            st.session_state.pop("_pending_csv_import", None)
+            st.rerun()
+
+    _confirm_csv_import()
 
 st.write("")
 
@@ -76,7 +91,7 @@ with st.container(border=True):
     if a_canal == CANAL_COURRIER:
         st.info(f"📬 Le dossier sera enregistré au **{SERVICE_COURRIER}**, avec une première transmission "
                 f"automatique « {EXTERNE} → {SERVICE_COURRIER} ». Utilisez ensuite la page "
-                "**🔀 Transmissions & traçabilité** pour l'acheminer vers le poste concerné.")
+                "**Transmissions & traçabilité** pour l'acheminer vers le poste concerné.")
         a_poste = SERVICE_COURRIER
         a_poste_vise = st.selectbox(
             "Poste concerné visé (indicatif — pour la direction déduite uniquement, l'acheminement réel "
@@ -131,7 +146,8 @@ with st.container(border=True):
                 if not ok:
                     st.warning(f"Dossier ajouté, mais la transmission initiale n'a pas pu être "
                                f"enregistrée automatiquement : {message}")
-            st.success(f"Dossier « {a_objet} » ({new_id}) ajouté, arrivé à : {a_poste}.")
+            st.toast(f"Dossier « {a_objet} » ({new_id}) ajouté, arrivé à : {a_poste}.", icon="✅")
+            st.balloons()
             st.rerun()
 
 st.write("")
@@ -193,11 +209,11 @@ else:
     kpi_row([
         ("Dossiers affichés", str(len(view)), None),
         ("Total registre", str(len(register)), None),
-    ], icons=["📁", "🗄️"])
+    ], icons=["👁️", "🗄️"])
 
     st.caption("ℹ️ Toute modification ou suppression faite directement dans ce tableau est désormais "
                "journalisée (qui, quand, quel champ) dans le **journal d'audit**, en bas de la page "
-               "🔀 Transmissions & traçabilité — y compris un changement de statut ou de poste "
+               "Transmissions & traçabilité — y compris un changement de statut ou de poste "
                "destinataire fait ici plutôt que via une transmission en bonne et due forme.")
     edited = st.data_editor(
         view,
@@ -247,9 +263,9 @@ else:
 st.write("")
 section_title("📎 PIÈCES JOINTES (SCANS) — INSPIRÉ DE LA NUMÉRISATION MAARCH COURRIER")
 st.caption(
-    "Fonction native, sans lien avec Maarch : les fichiers sont conservés dans cette session et inclus "
-    "dans la sauvegarde JSON complète (page d'accueil). Ce n'est pas un coffre-fort documentaire — "
-    "limitez la taille (5 Mo) et le nombre de fichiers par dossier."
+    "Fonction native, sans lien avec Maarch : les fichiers sont conservés sur disque, à côté de la base "
+    "partagée, et inclus dans la sauvegarde JSON complète (page d'accueil). Ce n'est pas un coffre-fort "
+    "documentaire — limitez la taille (5 Mo) et le nombre de fichiers par dossier."
 )
 register_full = get_register()
 if register_full.empty:
@@ -264,8 +280,10 @@ else:
         type=None,
     )
     if pj_upload is not None and st.button("Attacher ce fichier", key=f"pj_attach_{pj_id}"):
-        ok, message = add_attachment(pj_id, pj_upload)
-        (st.success if ok else st.error)(message)
+        with st.status("Enregistrement de la pièce jointe...", expanded=False) as status:
+            ok, message = add_attachment(pj_id, pj_upload)
+            status.update(label=message, state="complete" if ok else "error")
+        (st.toast if ok else st.error)(message, icon="✅" if ok else None)
         if ok:
             st.rerun()
 
@@ -280,6 +298,7 @@ else:
                                    key=f"pj_dl_{pj_id}_{i}")
             if fcol3.button("🗑️ Retirer", key=f"pj_rm_{pj_id}_{i}"):
                 remove_attachment(pj_id, i)
+                st.toast(f"« {f['nom']} » retiré.", icon="🗑️")
                 st.rerun()
 
 render_sidebar_footer()

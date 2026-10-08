@@ -3,12 +3,11 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
+from utils.ui import inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import get_register, with_derived_columns, CANAL_COURRIER
 from utils.transmissions import get_log
 from utils.session import current_post_selector
 
-st.set_page_config(page_title="Recherche & registre du courrier — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
 
 poste_courant = current_post_selector()

@@ -5,15 +5,77 @@ Rurale (AER), conçue en réponse au diagnostic du mémoire : **« Insuffisance 
 de centralisation des processus internes de l'A.E.R »** (difficultés de traçabilité, retards de
 traitement, dispersion de l'information entre WhatsApp/papier/Excel, manque de coordination).
 
-**Mise à jour majeure — passage d'un prototype de démonstration à un outil utilisable en pilote
-réel** (voir la section dédiée plus bas pour le détail complet) : la version initiale gardait tout
-dans `st.session_state`, isolé par session de navigateur — deux agents ouvrant l'application dans
-deux onglets différents voyaient chacun un registre vide et indépendant, ce qui empêchait toute
-coordination réelle entre services. Les données vivent désormais dans une base **SQLite partagée**
-entre tous les utilisateurs connectés au même serveur, en plus de trois bugs corrigés, d'un
-**journal d'audit** des modifications directes, de quelques fonctionnalités supplémentaires, et
-d'une suite de tests automatisés (22 tests). Rien de tout cela ne change la philosophie du projet :
-toujours aucun dossier réel préchargé, toujours honnête sur ses limites.
+**Mise à jour majeure (v2) — passage d'un prototype de démonstration à un outil utilisable en
+pilote réel** : la version initiale gardait tout dans `st.session_state`, isolé par session de
+navigateur — deux agents ouvrant l'application dans deux onglets différents voyaient chacun un
+registre vide et indépendant, ce qui empêchait toute coordination réelle entre services. Les
+données vivent depuis dans une base **SQLite partagée** entre tous les utilisateurs connectés au
+même serveur, en plus de trois bugs corrigés, d'un **journal d'audit** des modifications directes,
+et d'une suite de tests automatisés.
+
+## Version 3 — refonte professionnelle (design system, navigation, animations)
+
+Cette troisième version intègre dans l'application AER les compétences, outils et styles
+Streamlit démontrés dans une vitrine de compétences construite séparément dans cette même session
+(`developing-with-streamlit` pour la mécanique d'application — navigation, thème, data-display,
+performance — et `dataviz` pour la méthode de choix des couleurs de graphique). Rien de la logique
+métier existante (routage hiérarchique, calculs de retard, audit, sauvegarde JSON) n'a changé —
+seules la présentation, la structure de navigation et l'expérience utilisateur ont été reprises.
+
+**Ce qui a changé concrètement :**
+
+- **Design system par thème natif** (`.streamlit/config.toml`) : palette institutionnelle AER
+  (bleu marine + accent teal), déclinée en variante **claire et sombre** (menu ⋮ → *Settings* →
+  *Choose app theme*) — remplace l'essentiel du CSS fait main de la v2. Le peu de CSS qui reste
+  (`utils/ui.py`) est un recours volontaire et restreint : dégradé de marque de la barre latérale,
+  bandeau d'en-tête, badges de statut multicolores (le thème natif ne connaît que 7 couleurs
+  nommées), et la couche d'animations — chaque bloc se recalcule à partir du thème actif
+  (`st.context.theme`) au lieu de dupliquer une palette figée.
+- **Navigation par sections** (`st.navigation`/`st.Page`, dans `streamlit_app.py`) : remplace
+  l'ancienne auto-découverte par dossier `pages/` (dépréciée) par quatre sections — *Vue
+  d'ensemble*, *Dossiers*, *Pilotage*, *Assistance* — chacune des huit pages vivant maintenant dans
+  `app_pages/`.
+- **Deux pages supplémentaires** : **Aide & guide**, un assistant à base de règles (recherche de
+  mots-clés dans un jeu de réponses écrites à l'avance sur le fonctionnement de l'application —
+  explicitement présenté comme tel, **pas** un vrai modèle de langage) ; **Paramètres & thème**,
+  qui affiche le thème actif et la palette appliquée, et centralise les actions globales
+  (réinitialisation des données, rechargement de la démonstration), chacune derrière une boîte de
+  dialogue de confirmation.
+- **Data-display enrichi** : compteurs KPI animés (montée en valeur façon tableau de bord), mini-
+  graphiques de tendance sur `st.metric` (volume de dossiers reçus sur 14 jours — jamais de
+  tendance inventée sur un indicateur dont l'historique n'est pas connu), colonnes à barre de
+  progression, graphiques natifs (`st.bar_chart`) là où Plotly n'apportait rien de plus, boîtes de
+  dialogue de confirmation avant toute action irréversible (restauration de sauvegarde,
+  remplacement du registre par un CSV, réinitialisation).
+- **Animations et micro-interactions** : apparition progressive des cartes et sections au
+  chargement, pastille « en direct » clignotante sur les indicateurs recalculés à la volée, survol
+  avec légère élévation sur les cartes/boutons, confettis et notifications (`st.toast`) après une
+  action réussie, indicateur de progression (`st.status`) pendant l'enregistrement d'une pièce
+  jointe. Choix assumé (l'utilisateur n'a pas exprimé de préférence entre une approche 100 %
+  native/CSS et des composants personnalisés) : une couche CSS/JS scoping restreinte plutôt que des
+  composants React sur mesure, pour rester un déploiement Streamlit standard, sans étape de build
+  supplémentaire.
+- **Jeu de données de démonstration pré-chargé** (`seed_data/aer_demo_300.json`, chargé par
+  `utils/demo_data.py` au tout premier démarrage uniquement, base vide) : 300 dossiers et 620
+  transmissions réalistes, pour que l'application soit immédiatement représentative plutôt que de
+  démarrer sur un registre vide. Choix assumé (là aussi, sans préférence exprimée) : repartir d'une
+  base vide reste possible à tout moment depuis **Paramètres & thème** → *Réinitialiser les
+  données*.
+- **Identité visuelle** : aucun logo officiel de l'AER n'a pu être localisé ni téléchargé en ligne
+  (recherche web infructueuse, et cet environnement ne peut techniquement pas télécharger un
+  fichier binaire externe arbitraire) — `assets/aer_emblem.svg` et `assets/aer_wordmark.svg` sont un
+  emblème **ORIGINAL**, créé pour ce prototype (pas une reconstitution du vrai logo), affiché via
+  `st.logo()`. Remplacez ces deux fichiers par les vôtres dès qu'un logo officiel est disponible —
+  aucune autre partie de l'application n'a besoin d'être modifiée.
+- **Remarque technique sur les icônes** : une première version de cette refonte utilisait des
+  icônes Material Symbols chargées depuis Google Fonts dans le CSS personnalisé (bandeau d'en-tête,
+  cartes KPI) ; la QA visuelle a montré que le glyphe ne s'affichait pas si le navigateur ne peut
+  pas atteindre `fonts.googleapis.com` (réseaux d'entreprise filtrés, environnements sans accès
+  internet sortant) — le nom de l'icône s'affichait alors en toutes lettres. Remplacé par des
+  émojis (police système, aucune dépendance réseau) pour ces éléments faits main ; les icônes de la
+  barre de **navigation**, elles, restent en `:material/...:` et continuent de s'afficher
+  correctement, Streamlit les servant depuis ses propres polices embarquées plutôt que depuis
+  Google Fonts.
 
 ## Installation
 
@@ -26,7 +88,7 @@ pip install -r requirements.txt
 ## Lancement
 
 ```bash
-streamlit run Home.py
+streamlit run streamlit_app.py
 ```
 
 ## Tests
@@ -36,53 +98,67 @@ pip install pytest
 pytest tests/
 ```
 
-22 tests : stockage SQLite (y compris la non-collision des numéros de dossier après suppression),
-règles de routage hiérarchique de l'organigramme, et chargement de chaque page (à vide, avec
-données, et — le plus important — **vérification que deux sessions distinctes voient bien le même
-registre**, qui est exactement la faille que cette refonte corrige).
+23 tests : stockage SQLite (y compris la non-collision des numéros de dossier après suppression),
+règles de routage hiérarchique de l'organigramme, chargement de chaque page (à vide, avec données,
+et — le plus important — **vérification que deux sessions distinctes voient bien le même
+registre**, qui est exactement la faille que la v2 corrige), et chargement du point d'entrée réel
+(`streamlit_app.py`) avec amorçage du jeu de démonstration.
 
 ## Structure du projet
 
 ```
-Home.py                                    Vue d'ensemble : KPI, alertes, rappels d'échéance (7 j),
-                                              sélecteur de poste, sauvegarde JSON + export Excel
-pages/
-  1_📂_Registre_des_dossiers.py            Registre générique : saisie, filtres (dont échéance et
-                                              tri), édition, CSV
-  2_🔀_Transmissions_et_traçabilité.py     Journal des mouvements avec routage contraint, retour à
+streamlit_app.py                           Point d'entrée : thème, logo, amorçage des données de
+                                              démonstration, puis st.navigation (4 sections, 8 pages)
+app_pages/
+  accueil.py                               Vue d'ensemble : KPI animés, alertes, rappels d'échéance
+                                              (7 j), sélecteur de poste, sauvegarde JSON + export Excel
+  registre.py                               Registre générique : saisie, filtres (dont échéance et
+                                              tri), édition, CSV, pièces jointes
+  transmissions.py                         Journal des mouvements avec routage contraint, retour à
                                               l'émetteur, bordereau, frise chronologique, et le
                                               JOURNAL D'AUDIT (qui a modifié quoi, quand)
-  3_📊_Tableau_de_bord.py                  Indicateurs, benchmarking des délais par service, rapport
-                                              de synthèse exportable
-  4_🏢_Organigramme.py                     Référentiel réel + graphe organigramme avec voyants de
+  tableau_de_bord.py                       Indicateurs (st.metric + mini-tendances), benchmarking des
+                                              délais par service, rapport de synthèse exportable
+  organigramme.py                          Référentiel réel + graphe organigramme avec voyants de
                                               statut (vert/jaune/rouge) en temps réel
-  5_🔍_Recherche_et_registre_courrier.py   Recherche plein texte + registre chronologique du courrier
+  recherche.py                             Recherche plein texte + registre chronologique du courrier
                                               (bureau d'ordre)
+  aide_assistant.py                        NOUVEAU — guide à base de règles (pas une IA), suggestions
+  parametres_theme.py                      NOUVEAU — thème actif, palette, réinitialisation des données
 utils/
-  db.py                                      NOUVEAU — stockage SQLite partagé et persistant (voir
-                                              section dédiée) : connexion mise en cache par processus,
-                                              schéma, CRUD, journal d'audit
+  db.py                                      Stockage SQLite partagé et persistant (voir section
+                                              dédiée) : connexion mise en cache par processus, schéma,
+                                              CRUD, journal d'audit
   orgchart.py                                Structure réelle de l'AER (Direction Générale, DECDP,
                                               DGOER, DAAF, sous-directions, services, antennes) +
                                               graphe hiérarchique avec rangs et règles de routage
   dossiers.py                                Modèle du registre de dossiers + calculs de retard ;
-                                              lit/écrit désormais dans utils/db.py
+                                              lit/écrit dans utils/db.py
   transmissions.py                           Journal des transmissions, validation du routage, sens
                                               (aller/retour), délais impartis, bordereau ; lit/écrit
-                                              désormais dans utils/db.py
+                                              dans utils/db.py
   session.py                                 Simulation de poste courant (filtre d'affichage)
   backup.py                                  Sauvegarde / restauration complète (JSON, y compris les
                                               pièces jointes) — reste le filet de sécurité ultime
   attachments.py                             Pièces jointes (scans) par dossier — métadonnées en base,
-                                              fichiers sur disque (plus en mémoire de session)
-  exports.py                                 NOUVEAU — export Excel multi-feuilles (registre,
-                                              transmissions, pièces jointes, journal d'audit)
-  ui.py                                      Composants d'interface & thème partagés
-tests/                                       NOUVEAU — 22 tests (pytest + streamlit.testing.v1.AppTest)
+                                              fichiers sur disque
+  exports.py                                 Export Excel multi-feuilles (registre, transmissions,
+                                              pièces jointes, journal d'audit)
+  ui.py                                      NOUVEAU (v3) — design system : thème clair/sombre
+                                              theme-aware, animations, badges, KPI, logo
+  demo_data.py                              NOUVEAU (v3) — amorçage et réinitialisation du jeu de
+                                              démonstration
+.streamlit/config.toml                      NOUVEAU (v3) — thème natif Streamlit (clair + sombre)
+assets/                                      NOUVEAU (v3) — emblème et lockup AER (originaux, voir
+                                              plus haut)
+seed_data/aer_demo_300.json                 NOUVEAU (v3) — 300 dossiers / 620 transmissions de
+                                              démonstration
+tests/                                       23 tests (pytest + streamlit.testing.v1.AppTest)
   conftest.py                                Redirige la base SQLite vers un répertoire temporaire
   test_db.py                                 Stockage, non-collision des numéros, cascade de suppression
   test_orgchart.py                           Règles de routage hiérarchique
-  test_pages.py                              Chargement de chaque page + partage entre deux sessions
+  test_pages.py                              Chargement de chaque page + partage entre deux sessions +
+                                              amorçage de la démonstration depuis streamlit_app.py
 ```
 
 ## Circuit d'entrée d'un dossier — le service courrier comme porte d'entrée
@@ -166,9 +242,13 @@ documentaire et courrier, utilisé par certaines administrations camerounaises).
 ## Ce que cette application fait — et ne fait pas
 
 - **Aucun dossier réel n'est préchargé.** Ni le mémoire, ni l'organigramme fourni ne contiennent de
-  vrais dossiers, échéances ou statuts : le registre et le journal des transmissions **démarrent
-  vides**. C'est un prototype à alimenter (avec des cas réels ou fictifs selon l'usage : démonstration
-  académique, test pilote sur un service).
+  vrais dossiers, échéances ou statuts. Depuis la v3, l'application démarre avec un **jeu de
+  démonstration fictif** (300 dossiers, 620 transmissions, générés pour être réalistes) plutôt
+  qu'un registre vide, pour être immédiatement représentative lors d'une présentation ou d'un
+  pilote — repartir d'une base vide reste possible à tout moment (page **Paramètres & thème** →
+  *Réinitialiser les données*). Dans tous les cas, c'est un prototype à alimenter avec de vrais cas
+  (démonstration académique, test pilote sur un service), jamais un accès à un vrai système
+  d'information existant.
 - **Le routage s'appuie sur l'organigramme réel de l'AER**, avec des rangs déduits de la légende
   officielle (« chef de division et conseiller technique = rang directeur », « chef de cellule = rang
   sous-directeur », « chargé d'étude = rang chef de service ») — sauf pour les 4 chefs d'antenne
@@ -247,7 +327,7 @@ bonne et due forme) n'était tracée nulle part.
 ## Déploiement
 
 Projet prêt pour [Streamlit Community Cloud](https://streamlit.io/cloud) : poussez ce dossier sur un
-dépôt Git et pointez le déploiement vers `Home.py`. Lisez d'abord la section « Stockage partagé et
+dépôt Git et pointez le déploiement vers `streamlit_app.py`. Lisez d'abord la section « Stockage partagé et
 persistant » ci-dessus — sur Community Cloud spécifiquement, le disque n'est pas persistant d'un
 redéploiement à l'autre, donc la sauvegarde JSON régulière reste nécessaire pour ne rien perdre. Pour un
 usage pilote réel avec plusieurs agents, un hébergement avec disque persistant (VM de l'AER, PaaS avec

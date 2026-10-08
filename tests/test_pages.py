@@ -1,9 +1,13 @@
 """Tests fonctionnels des pages (streamlit.testing.v1.AppTest) : vérifie que
 chaque page s'exécute sans exception, à vide puis avec des données, et que
 le partage des données entre « utilisateurs » fonctionne bien (c'est le
-changement le plus important de cette refonte : deux AppTest représentent
-ici deux navigateurs/sessions différents, qui doivent voir le même
-registre)."""
+changement le plus important de la v2 : deux AppTest représentent ici deux
+navigateurs/sessions différents, qui doivent voir le même registre).
+
+Depuis la v3, chaque page est testée directement via son fichier dans
+`app_pages/` (ce que `AppTest.from_file` continue de supporter très bien,
+sans dépendre de `st.navigation`/`streamlit_app.py` — qui est, lui, testé
+séparément ci-dessous, seeding du jeu de démonstration inclus)."""
 from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
@@ -13,12 +17,14 @@ from utils import db
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 PAGES = [
-    PROJECT_ROOT / "Home.py",
-    PROJECT_ROOT / "pages" / "1_📂_Registre_des_dossiers.py",
-    PROJECT_ROOT / "pages" / "2_🔀_Transmissions_et_traçabilité.py",
-    PROJECT_ROOT / "pages" / "3_📊_Tableau_de_bord.py",
-    PROJECT_ROOT / "pages" / "4_🏢_Organigramme.py",
-    PROJECT_ROOT / "pages" / "5_🔍_Recherche_et_registre_courrier.py",
+    PROJECT_ROOT / "app_pages" / "accueil.py",
+    PROJECT_ROOT / "app_pages" / "registre.py",
+    PROJECT_ROOT / "app_pages" / "transmissions.py",
+    PROJECT_ROOT / "app_pages" / "tableau_de_bord.py",
+    PROJECT_ROOT / "app_pages" / "organigramme.py",
+    PROJECT_ROOT / "app_pages" / "recherche.py",
+    PROJECT_ROOT / "app_pages" / "aide_assistant.py",
+    PROJECT_ROOT / "app_pages" / "parametres_theme.py",
 ]
 
 
@@ -37,7 +43,7 @@ def _champs_dossier(**overrides) -> dict:
 
 def test_toutes_les_pages_se_chargent_a_vide():
     for page in PAGES:
-        at = AppTest.from_file(str(page), default_timeout=20)
+        at = AppTest.from_file(str(page), default_timeout=30)
         at.run()
         assert not at.exception, f"{page.name} a levé une exception à vide : {at.exception}"
 
@@ -51,7 +57,7 @@ def test_toutes_les_pages_se_chargent_avec_des_donnees():
     }, "Poste test", "Transmission")
 
     for page in PAGES:
-        at = AppTest.from_file(str(page), default_timeout=20)
+        at = AppTest.from_file(str(page), default_timeout=30)
         at.run()
         assert not at.exception, f"{page.name} a levé une exception avec données : {at.exception}"
 
@@ -64,25 +70,21 @@ def test_les_donnees_sont_partagees_entre_deux_sessions():
     partagée et non plus dans `st.session_state`."""
     numero = db.insert_dossier(_champs_dossier(objet="Dossier partagé"), poste_auteur="Poste test")
 
-    session_a = AppTest.from_file(str(PROJECT_ROOT / "Home.py"), default_timeout=20)
+    session_a = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "accueil.py"), default_timeout=30)
     session_a.run()
-    session_b = AppTest.from_file(str(PROJECT_ROOT / "Home.py"), default_timeout=20)
+    session_b = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "accueil.py"), default_timeout=30)
     session_b.run()
 
     assert not session_a.exception and not session_b.exception
-    # Le KPI "Dossiers au total" (première carte) doit refléter 1 dossier dans les deux sessions.
     texte_a = " ".join(m.value for m in session_a.markdown if m.value)
     texte_b = " ".join(m.value for m in session_b.markdown if m.value)
-    assert "Dossier partagé" not in texte_a and "Dossier partagé" not in texte_b  # pas affiché sur Home
-    # Vérification directe et sans ambiguïté : la base est unique, donc les deux sessions
-    # interrogent exactement les mêmes lignes.
+    assert "Dossier partagé" not in texte_a and "Dossier partagé" not in texte_b  # pas affiché sur Accueil
     assert len(db.fetch_dossiers()) == 1
     assert db.fetch_dossiers()[0]["numero"] == numero
 
 
 def test_formulaire_nouveau_dossier_fonctionne_de_bout_en_bout():
-    at = AppTest.from_file(str(PROJECT_ROOT / "pages" / "1_📂_Registre_des_dossiers.py"),
-                            default_timeout=20)
+    at = AppTest.from_file(str(PROJECT_ROOT / "app_pages" / "registre.py"), default_timeout=30)
     at.run()
     assert not at.exception
 
@@ -94,3 +96,16 @@ def test_formulaire_nouveau_dossier_fonctionne_de_bout_en_bout():
 
     rows = db.fetch_dossiers()
     assert any(r["objet"] == "Dossier saisi via le formulaire" for r in rows)
+
+
+def test_entree_streamlit_app_se_charge_et_seme_la_demo():
+    """`streamlit_app.py` seul charge le jeu de démonstration (300 dossiers /
+    620 transmissions) si la base est vide — vérifie l'intégration bout en
+    bout de `utils.demo_data.seed_demo_data_if_empty()` depuis le vrai point
+    d'entrée, pas seulement la fonction en isolation."""
+    assert not db.fetch_dossiers(), "la base doit être vide avant ce test (fixture _clean_database)"
+    at = AppTest.from_file(str(PROJECT_ROOT / "streamlit_app.py"), default_timeout=60)
+    at.run()
+    assert not at.exception
+    assert len(db.fetch_dossiers()) == 300
+    assert len(db.fetch_transmissions()) == 620

@@ -123,6 +123,14 @@ def get_register() -> pd.DataFrame:
     df = pd.DataFrame(data, columns=REGISTER_COLUMNS)
     df["Date de réception"] = pd.to_datetime(df["Date de réception"], errors="coerce")
     df["Échéance prévue"] = pd.to_datetime(df["Échéance prévue"], errors="coerce")
+    # Une valeur NULL en base (ex. « Référence externe » non renseignée) ne
+    # doit pas s'afficher comme le mot « None » dans les tableaux — une
+    # cellule vide est la lecture correcte. `_cell_to_text` fait déjà le
+    # trajet inverse (une cellule vide est ré-enregistrée comme NULL), donc
+    # cet aller-retour ne perd aucune information.
+    for col in REGISTER_COLUMNS:
+        if col not in ("Date de réception", "Échéance prévue"):
+            df[col] = df[col].fillna("")
     return df
 
 

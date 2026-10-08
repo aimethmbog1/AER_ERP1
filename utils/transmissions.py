@@ -86,6 +86,9 @@ def get_log() -> pd.DataFrame:
     df = pd.DataFrame(data, columns=LOG_COLUMNS)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df["Délai imparti (jours)"] = pd.to_numeric(df["Délai imparti (jours)"], errors="coerce")
+    # Même traitement que get_register() : une cellule texte vide, pas le mot
+    # « None », pour un commentaire non renseigné.
+    df["Commentaire"] = df["Commentaire"].fillna("")
     return df
 
 
