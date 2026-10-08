@@ -53,7 +53,7 @@ with c1:
     )])
     fig.update_layout(title="Répartition des dossiers par statut")
     fig = plotly_base_layout(fig, legend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 with c2:
     by_dir = register.groupby("Direction concernée", as_index=False).size().sort_values("size", ascending=False)
     by_dir.columns = ["Direction", "Nombre de dossiers"]
@@ -61,7 +61,7 @@ with c2:
                  title="Dossiers par direction")
     fig = plotly_base_layout(fig, legend=False)
     fig.update_xaxes(tickangle=-25)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 c3, c4 = st.columns(2)
 with c3:
@@ -70,7 +70,7 @@ with c3:
     fig = px.bar(by_type, x="Type", y="Nombre de dossiers", color_discrete_sequence=["#C9A24B"],
                  title="Dossiers par type")
     fig = plotly_base_layout(fig, legend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 with c4:
     by_service = register.groupby("Service destinataire actuel", as_index=False).size().sort_values(
         "size", ascending=False).head(15)
@@ -79,7 +79,7 @@ with c4:
                  title="Charge actuelle par service (top 15)")
     fig = plotly_base_layout(fig, legend=False)
     fig.update_xaxes(tickangle=-35)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 st.write("")
 section_title("BENCHMARKING DES SERVICES — DISTRIBUTION DES DÉLAIS DE TRAITEMENT")
@@ -94,7 +94,7 @@ else:
                  title="Distribution du temps passé par service (jours) — identifie les goulots d'étranglement")
     fig = plotly_base_layout(fig, legend=False, height=420)
     fig.update_xaxes(tickangle=-35)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     nb_depassements = int(tps["Dépassement"].sum())
     if nb_depassements:
         st.warning(f"{nb_depassements} étape(s) de transmission ont dépassé le délai imparti fixé — "
@@ -109,11 +109,18 @@ else:
     st.dataframe(
         retard_view[["N° dossier", "Objet", "Direction concernée", "Service destinataire actuel",
                      "Priorité", "Statut", "Échéance prévue", "Jours de retard", "Agent en charge"]],
-        use_container_width=True, hide_index=True,
+        width='stretch', hide_index=True,
+        column_config={"Échéance prévue": st.column_config.DateColumn("Échéance prévue")},
     )
 
 with st.expander("📄 Détail complet avec colonnes calculées"):
-    st.dataframe(register, use_container_width=True, hide_index=True, height=420)
+    st.dataframe(
+        register, width='stretch', hide_index=True, height=420,
+        column_config={
+            "Date de réception": st.column_config.DateColumn("Date de réception"),
+            "Échéance prévue": st.column_config.DateColumn("Échéance prévue"),
+        },
+    )
 
 st.write("")
 section_title("RAPPORT DE SYNTHÈSE")

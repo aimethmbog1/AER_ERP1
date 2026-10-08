@@ -5,7 +5,7 @@ import streamlit as st
 
 from utils.ui import PAGE_ICON, inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import (
-    get_register, set_register, next_dossier_id, with_derived_columns,
+    get_register, set_register, add_dossier, with_derived_columns, date_echeance_warning,
     REGISTER_COLUMNS, TYPES_DOSSIER, STATUTS, PRIORITES,
     CANAL_COURRIER, CANAL_DIRECT, CANAUX_RECEPTION,
 )
@@ -110,28 +110,19 @@ with st.container(border=True):
     )
     a_notes = st.text_area("Notes", key="add_notes", height=68)
 
+    date_warning = date_echeance_warning(a_date_reception, a_echeance)
+    if date_warning:
+        st.warning(f"⚠️ {date_warning}")
+
     if st.button("Ajouter au registre", type="primary"):
         if not a_objet:
             st.warning("Renseignez au moins l'objet du dossier avant de l'ajouter.")
         else:
-            reg = get_register()
-            new_id = next_dossier_id(reg)
-            new_row = pd.DataFrame([{
-                "N° dossier": new_id,
-                "Date de réception": pd.to_datetime(a_date_reception),
-                "Objet": a_objet,
-                "Type de dossier": a_type,
-                "Canal de réception": a_canal,
-                "Direction concernée": a_direction,
-                "Service destinataire actuel": a_poste,
-                "Statut": a_statut,
-                "Priorité": a_priorite,
-                "Échéance prévue": pd.to_datetime(a_echeance),
-                "Agent en charge": a_agent,
-                "Référence externe (optionnel)": a_ref_externe,
-                "Notes": a_notes,
-            }])
-            set_register(pd.concat([reg, new_row], ignore_index=True))
+            new_id = add_dossier(
+                objet=a_objet, type_dossier=a_type, canal=a_canal, direction=a_direction,
+                poste=a_poste, statut=a_statut, priorite=a_priorite, date_reception=a_date_reception,
+                echeance=a_echeance, agent=a_agent, ref_externe=a_ref_externe, notes=a_notes,
+            )
             if a_canal == CANAL_COURRIER:
                 ok, message = add_transmission(
                     new_id, a_date_reception, EXTERNE, SERVICE_COURRIER,
@@ -159,10 +150,18 @@ else:
     f_direction = fc2.multiselect("Direction", sorted(register["Direction concernée"].dropna().unique()), default=[])
     f_type = fc3.multiselect("Type de dossier", TYPES_DOSSIER, default=[])
     f_search = fc4.text_input("Rechercher (objet / agent / réf. externe / notes)")
-    f_mon_poste = st.checkbox(
+    fc5, fc6, fc7 = st.columns([1.3, 1, 1])
+    f_mon_poste = fc5.checkbox(
         f"N'afficher que les dossiers actuellement à mon poste ({poste_courant})" if poste_courant else
         "N'afficher que les dossiers à mon poste (sélectionnez un poste dans la barre latérale)",
         value=False, disabled=(poste_courant is None), key="reg_filter_mon_poste",
+    )
+    f_echeance_avant = fc6.date_input("Échéance avant le (optionnel)", value=None, key="reg_filter_echeance",
+                                       help="N'affiche que les dossiers dont l'échéance prévue tombe avant "
+                                            "cette date — utile pour préparer une revue des urgences.")
+    f_tri = fc7.selectbox(
+        "Trier par", ["N° dossier", "Échéance prévue (la plus proche d'abord)", "Date de réception (la plus récente d'abord)"],
+        key="reg_filter_tri",
     )
 
     view = register.copy()
@@ -174,6 +173,9 @@ else:
         view = view[view["Direction concernée"].isin(f_direction)]
     if f_type:
         view = view[view["Type de dossier"].isin(f_type)]
+    if f_echeance_avant:
+        view = view[view["Échéance prévue"].notna() &
+                    (view["Échéance prévue"] <= pd.Timestamp(f_echeance_avant))]
     if f_search:
         mask = (
             view["Objet"].astype(str).str.contains(f_search, case=False, na=False) |
@@ -183,18 +185,33 @@ else:
         )
         view = view[mask]
 
+    if f_tri == "Échéance prévue (la plus proche d'abord)":
+        view = view.sort_values("Échéance prévue", na_position="last")
+    elif f_tri == "Date de réception (la plus récente d'abord)":
+        view = view.sort_values("Date de réception", ascending=False, na_position="last")
+
     kpi_row([
         ("Dossiers affichés", str(len(view)), None),
         ("Total registre", str(len(register)), None),
     ], icons=["📁", "🗄️"])
 
+    st.caption("ℹ️ Toute modification ou suppression faite directement dans ce tableau est désormais "
+               "journalisée (qui, quand, quel champ) dans le **journal d'audit**, en bas de la page "
+               "🔀 Transmissions & traçabilité — y compris un changement de statut ou de poste "
+               "destinataire fait ici plutôt que via une transmission en bonne et due forme.")
     edited = st.data_editor(
         view,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         num_rows="dynamic",
         height=min(60 + 36 * (len(view) + 1), 480),
         column_config={
+            "N° dossier": st.column_config.TextColumn(
+                "N° dossier", disabled=True,
+                help="Attribué automatiquement et non modifiable, pour garantir qu'il reste unique et "
+                     "stable dans le temps — laissez cette cellule vide pour une nouvelle ligne ajoutée "
+                     "ici, un numéro lui sera attribué à l'enregistrement.",
+            ),
             "Date de réception": st.column_config.DateColumn("Date de réception"),
             "Échéance prévue": st.column_config.DateColumn("Échéance prévue"),
             "Statut": st.column_config.SelectboxColumn("Statut", options=STATUTS),
@@ -215,7 +232,7 @@ else:
         },
         key="register_editor",
     )
-    if f_statut or f_direction or f_type or f_search or (f_mon_poste and poste_courant):
+    if f_statut or f_direction or f_type or f_search or f_echeance_avant or (f_mon_poste and poste_courant):
         st.caption("⚠️ Un filtre est actif : les modifications ci-dessus ne portent que sur les lignes "
                    "affichées. Retirez les filtres pour éditer l'ensemble du registre en une fois.")
         others = register[~register["N° dossier"].isin(view["N° dossier"])]

@@ -1,7 +1,9 @@
 """Journal des transmissions entre services — c'est le cœur de la traçabilité :
 le mémoire diagnostique des difficultés de suivi et de coordination faute de
 trace centralisée des mouvements d'un dossier entre entités. Ce journal :
-  - démarre vide (aucun mouvement réel n'est préchargé) ;
+  - est stocké dans la base SQLite partagée (voir `utils/db.py`), commune à
+    tous les utilisateurs connectés au même serveur — et non plus dans
+    `st.session_state`, isolé par session de navigateur ;
   - n'accepte que des transmissions conformes au routage hiérarchique réel de
     l'AER (utils.orgchart.is_authorized) — pas de saut de niveau ;
   - distingue un mouvement « Aller » (descente/latéral) d'un « Retour » (vers
@@ -16,6 +18,7 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+from . import db
 from . import orgchart as og
 
 LOG_COLUMNS = [
@@ -28,6 +31,37 @@ LOG_COLUMNS = [
     "Commentaire",
 ]
 
+_DISPLAY_TO_DB = {
+    "N° dossier": "numero_dossier",
+    "Date": "date",
+    "Service source": "service_source",
+    "Service destination": "service_destination",
+    "Sens": "sens",
+    "Délai imparti (jours)": "delai_imparti_jours",
+    "Commentaire": "commentaire",
+}
+
+
+def _poste_auteur() -> str | None:
+    poste = st.session_state.get("poste_courant")
+    if poste and str(poste).startswith("("):
+        return None
+    return poste
+
+
+def _cell_to_text(value) -> str | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (pd.Timestamp, datetime, date)):
+        return pd.Timestamp(value).strftime("%Y-%m-%d")
+    text = str(value).strip()
+    return text or None
+
 
 def empty_log() -> pd.DataFrame:
     df = pd.DataFrame(columns=LOG_COLUMNS)
@@ -37,13 +71,55 @@ def empty_log() -> pd.DataFrame:
 
 
 def get_log() -> pd.DataFrame:
-    if "transmissions_log" not in st.session_state:
-        st.session_state["transmissions_log"] = empty_log()
-    return st.session_state["transmissions_log"]
+    rows = db.fetch_transmissions()
+    if not rows:
+        return empty_log()
+    data = [{
+        "N° dossier": r["numero_dossier"],
+        "Date": r["date"],
+        "Service source": r["service_source"],
+        "Service destination": r["service_destination"],
+        "Sens": r["sens"],
+        "Délai imparti (jours)": r["delai_imparti_jours"],
+        "Commentaire": r["commentaire"],
+    } for r in rows]
+    df = pd.DataFrame(data, columns=LOG_COLUMNS)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Délai imparti (jours)"] = pd.to_numeric(df["Délai imparti (jours)"], errors="coerce")
+    return df
+
+
+def _same_content(a: pd.DataFrame, b: pd.DataFrame) -> bool:
+    if len(a) != len(b):
+        return False
+    a2 = a.reset_index(drop=True).apply(lambda col: col.map(_cell_to_text))
+    b2 = b.reset_index(drop=True).apply(lambda col: col.map(_cell_to_text))
+    return a2.equals(b2)
 
 
 def set_log(df: pd.DataFrame) -> None:
-    st.session_state["transmissions_log"] = df
+    """Resynchronise le journal complet avec la base après une édition
+    directe du tableau (page Transmissions). N'écrit — et ne journalise dans
+    le journal d'audit — que s'il y a un changement réel, pour éviter de
+    recréer inutilement toutes les lignes à chaque rafraîchissement de
+    page."""
+    current = get_log()
+    if _same_content(current, df):
+        return
+
+    records = []
+    for _, row in df.iterrows():
+        delai = row.get("Délai imparti (jours)")
+        records.append({
+            "numero_dossier": _cell_to_text(row.get("N° dossier")),
+            "date": _cell_to_text(row.get("Date")),
+            "service_source": _cell_to_text(row.get("Service source")),
+            "service_destination": _cell_to_text(row.get("Service destination")),
+            "sens": _cell_to_text(row.get("Sens")),
+            "delai_imparti_jours": None if pd.isna(delai) else int(delai),
+            "commentaire": _cell_to_text(row.get("Commentaire")),
+        })
+    db.replace_all_transmissions(records, _poste_auteur(), "Édition directe du journal")
 
 
 def last_movement_for(dossier_id: str) -> pd.Series | None:
@@ -77,17 +153,16 @@ def add_transmission(dossier_id: str, dt: date, source: str, destination: str,
     retour_cible = suggested_return_target(dossier_id)
     sens = "Retour" if destination == retour_cible else "Aller"
 
-    log = get_log()
-    new_row = pd.DataFrame([{
-        "N° dossier": dossier_id,
-        "Date": pd.to_datetime(dt),
-        "Service source": source,
-        "Service destination": destination,
-        "Sens": sens,
-        "Délai imparti (jours)": delai_impartis_jours,
-        "Commentaire": commentaire,
-    }])
-    set_log(pd.concat([log, new_row], ignore_index=True))
+    fields = {
+        "numero_dossier": dossier_id,
+        "date": _cell_to_text(dt),
+        "service_source": source,
+        "service_destination": destination,
+        "sens": sens,
+        "delai_imparti_jours": delai_impartis_jours,
+        "commentaire": commentaire,
+    }
+    db.insert_transmission(fields, _poste_auteur(), source="Transmission")
     return True, f"Transmission enregistrée ({sens}) : {source} → {destination}."
 
 

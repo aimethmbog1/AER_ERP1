@@ -5,6 +5,16 @@ Rurale (AER), conçue en réponse au diagnostic du mémoire : **« Insuffisance 
 de centralisation des processus internes de l'A.E.R »** (difficultés de traçabilité, retards de
 traitement, dispersion de l'information entre WhatsApp/papier/Excel, manque de coordination).
 
+**Mise à jour majeure — passage d'un prototype de démonstration à un outil utilisable en pilote
+réel** (voir la section dédiée plus bas pour le détail complet) : la version initiale gardait tout
+dans `st.session_state`, isolé par session de navigateur — deux agents ouvrant l'application dans
+deux onglets différents voyaient chacun un registre vide et indépendant, ce qui empêchait toute
+coordination réelle entre services. Les données vivent désormais dans une base **SQLite partagée**
+entre tous les utilisateurs connectés au même serveur, en plus de trois bugs corrigés, d'un
+**journal d'audit** des modifications directes, de quelques fonctionnalités supplémentaires, et
+d'une suite de tests automatisés (22 tests). Rien de tout cela ne change la philosophie du projet :
+toujours aucun dossier réel préchargé, toujours honnête sur ses limites.
+
 ## Installation
 
 ```bash
@@ -19,14 +29,29 @@ pip install -r requirements.txt
 streamlit run Home.py
 ```
 
+## Tests
+
+```bash
+pip install pytest
+pytest tests/
+```
+
+22 tests : stockage SQLite (y compris la non-collision des numéros de dossier après suppression),
+règles de routage hiérarchique de l'organigramme, et chargement de chaque page (à vide, avec
+données, et — le plus important — **vérification que deux sessions distinctes voient bien le même
+registre**, qui est exactement la faille que cette refonte corrige).
+
 ## Structure du projet
 
 ```
-Home.py                                    Vue d'ensemble : KPI, alertes, sélecteur de poste, sauvegarde/restauration
+Home.py                                    Vue d'ensemble : KPI, alertes, rappels d'échéance (7 j),
+                                              sélecteur de poste, sauvegarde JSON + export Excel
 pages/
-  1_📂_Registre_des_dossiers.py            Registre générique : saisie, filtres, édition, CSV
+  1_📂_Registre_des_dossiers.py            Registre générique : saisie, filtres (dont échéance et
+                                              tri), édition, CSV
   2_🔀_Transmissions_et_traçabilité.py     Journal des mouvements avec routage contraint, retour à
-                                              l'émetteur, bordereau, frise chronologique
+                                              l'émetteur, bordereau, frise chronologique, et le
+                                              JOURNAL D'AUDIT (qui a modifié quoi, quand)
   3_📊_Tableau_de_bord.py                  Indicateurs, benchmarking des délais par service, rapport
                                               de synthèse exportable
   4_🏢_Organigramme.py                     Référentiel réel + graphe organigramme avec voyants de
@@ -34,17 +59,30 @@ pages/
   5_🔍_Recherche_et_registre_courrier.py   Recherche plein texte + registre chronologique du courrier
                                               (bureau d'ordre)
 utils/
+  db.py                                      NOUVEAU — stockage SQLite partagé et persistant (voir
+                                              section dédiée) : connexion mise en cache par processus,
+                                              schéma, CRUD, journal d'audit
   orgchart.py                                Structure réelle de l'AER (Direction Générale, DECDP,
                                               DGOER, DAAF, sous-directions, services, antennes) +
                                               graphe hiérarchique avec rangs et règles de routage
-  dossiers.py                                Modèle du registre de dossiers + calculs de retard
+  dossiers.py                                Modèle du registre de dossiers + calculs de retard ;
+                                              lit/écrit désormais dans utils/db.py
   transmissions.py                           Journal des transmissions, validation du routage, sens
-                                              (aller/retour), délais impartis, bordereau
+                                              (aller/retour), délais impartis, bordereau ; lit/écrit
+                                              désormais dans utils/db.py
   session.py                                 Simulation de poste courant (filtre d'affichage)
   backup.py                                  Sauvegarde / restauration complète (JSON, y compris les
-                                              pièces jointes)
-  attachments.py                             Pièces jointes (scans) par dossier, en mémoire de session
+                                              pièces jointes) — reste le filet de sécurité ultime
+  attachments.py                             Pièces jointes (scans) par dossier — métadonnées en base,
+                                              fichiers sur disque (plus en mémoire de session)
+  exports.py                                 NOUVEAU — export Excel multi-feuilles (registre,
+                                              transmissions, pièces jointes, journal d'audit)
   ui.py                                      Composants d'interface & thème partagés
+tests/                                       NOUVEAU — 22 tests (pytest + streamlit.testing.v1.AppTest)
+  conftest.py                                Redirige la base SQLite vers un répertoire temporaire
+  test_db.py                                 Stockage, non-collision des numéros, cascade de suppression
+  test_orgchart.py                           Règles de routage hiérarchique
+  test_pages.py                              Chargement de chaque page + partage entre deux sessions
 ```
 
 ## Circuit d'entrée d'un dossier — le service courrier comme porte d'entrée
@@ -144,14 +182,73 @@ documentaire et courrier, utilisé par certaines administrations camerounaises).
 - **La simulation de poste n'est pas un contrôle d'accès réel** : rien n'empêche techniquement de
   changer de poste ou d'éditer directement un dossier en dehors du routage validé (l'édition directe du
   registre le signale d'ailleurs explicitement).
-- **Pas de base de données persistante** : Streamlit ne conserve rien entre deux sessions ou après un
-  redéploiement. Utilisez la sauvegarde JSON complète (page d'accueil) avant de fermer une session, et
-  restaurez-la à la reprise.
-- **Les pièces jointes ne sont pas un vrai coffre-fort documentaire** : elles sont gardées en mémoire de
-  session (encodées en base64) et incluses dans la sauvegarde JSON complète — limitez leur taille (5 Mo
-  par fichier) et leur nombre (10 par dossier), sous peine de fichiers de sauvegarde très volumineux.
+- **Base de données partagée et persistante (SQLite)**, avec une limite honnête à connaître : voir la
+  section « Stockage partagé et persistant » ci-dessous. La sauvegarde JSON complète (page d'accueil)
+  reste le filet de sécurité ultime, surtout si l'hébergement choisi ne garantit pas un disque persistant.
+- **Les pièces jointes ne sont pas un vrai coffre-fort documentaire** : elles sont gardées sur le disque
+  du serveur (à côté de la base SQLite) et incluses dans la sauvegarde JSON complète — limitez leur
+  taille (5 Mo par fichier) et leur nombre (10 par dossier).
+
+## Stockage partagé et persistant (SQLite) — le changement le plus important de cette refonte
+
+**La faille corrigée** : la version initiale gardait tout dans `st.session_state`, isolé **par session
+de navigateur**. Deux agents de l'AER ouvrant l'application dans deux onglets différents voyaient donc
+chacun un registre vide et indépendant — ce qui contredisait l'objectif même de l'outil (coordination et
+traçabilité partagées entre services). Les données vivent désormais dans un fichier SQLite unique
+(`utils/db.py`), partagé par tous les utilisateurs connectés au **même processus serveur** (la connexion
+est mise en cache par `st.cache_resource`, donc un seul objet, réutilisé par toutes les sessions), avec
+le mode WAL pour des écritures concurrentes raisonnables en usage pilote (quelques dizaines d'utilisateurs
+simultanés, pas une charge de production à grande échelle).
+
+**Limite honnête à connaître avant un déploiement réel** : ce mécanisme partage les données entre tous
+les utilisateurs d'UN SEUL processus Streamlit en cours d'exécution, sur un seul serveur (pas de
+réplication multi-instance : SQLite ne s'y prête pas). Il ne survit pas non plus à un redémarrage si le
+disque qui contient le fichier `.db` n'est pas lui-même persistant — **c'est le cas sur Streamlit
+Community Cloud**, dont le système de fichiers est réinitialisé à chaque redéploiement ou réveil de
+veille. Pour un usage pilote réel durable :
+
+- hébergez l'application sur un serveur où le répertoire `data/` est un emplacement qui survit aux
+  redémarrages (volume Docker, VM de l'AER, disque persistant d'un PaaS) ;
+- sauvegardez régulièrement le fichier `.db`, ou utilisez l'export JSON complet (page d'accueil) ;
+- le chemin de la base est configurable via la variable d'environnement `AER_DOSSIERS_DB_PATH` (et
+  `AER_DOSSIERS_ATTACHMENTS_DIR` pour les pièces jointes), par défaut `data/suivi_dossiers.db` à la
+  racine du projet.
+
+## Journal d'audit — qui a modifié quoi, quand
+
+Nouvelle section en bas de la page **Transmissions & traçabilité**. Toute transmission, tout
+ajout/modification/suppression direct du registre ou des pièces jointes, et toute restauration de
+sauvegarde sont désormais journalisés (horodatage, champ modifié, ancienne/nouvelle valeur, poste
+auteur). Cela comble un trou de traçabilité réel de la version initiale : une modification de statut ou
+de poste destinataire faite directement dans le tableau du Registre (plutôt que via une transmission en
+bonne et due forme) n'était tracée nulle part.
+
+## Corrections apportées lors de cette refonte
+
+- **Collision de numéro de dossier après suppression** : l'ancien calcul (`len(df) + 1`) pouvait
+  réattribuer le numéro d'un dossier supprimé à un nouveau dossier. Le numéro est désormais basé sur
+  l'identifiant auto-incrémenté interne de la base, qui n'est jamais réutilisé.
+- **Délai imparti de 0 jour silencieusement ignoré** : `0` étant une valeur « fausse » en Python,
+  l'ancien code traitait un délai de 0 jour comme « aucun délai ». Remplacé par une case à cocher
+  explicite (« Fixer un délai imparti ») sur la page Transmissions.
+- **Validation des dates** : un avertissement s'affiche désormais si l'échéance prévue saisie est
+  antérieure à la date de réception.
+
+## Fonctionnalités ajoutées lors de cette refonte
+
+- **Rappels d'échéance à 7 jours** sur la page d'accueil (en plus du seuil de 3 jours déjà utilisé pour
+  les voyants de l'organigramme), pour anticiper plutôt que seulement constater un retard.
+- **Filtres avancés sur le Registre** : échéance avant une date donnée, tri par échéance la plus proche
+  ou par date de réception la plus récente.
+- **Export Excel multi-feuilles** (registre, transmissions, pièces jointes, journal d'audit), en plus de
+  la sauvegarde JSON et des exports CSV par table — pratique pour partager un instantané à la hiérarchie
+  sans donner accès à l'application elle-même.
 
 ## Déploiement
 
 Projet prêt pour [Streamlit Community Cloud](https://streamlit.io/cloud) : poussez ce dossier sur un
-dépôt Git et pointez le déploiement vers `Home.py`.
+dépôt Git et pointez le déploiement vers `Home.py`. Lisez d'abord la section « Stockage partagé et
+persistant » ci-dessus — sur Community Cloud spécifiquement, le disque n'est pas persistant d'un
+redéploiement à l'autre, donc la sauvegarde JSON régulière reste nécessaire pour ne rien perdre. Pour un
+usage pilote réel avec plusieurs agents, un hébergement avec disque persistant (VM de l'AER, PaaS avec
+volume) est recommandé.

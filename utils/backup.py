@@ -1,17 +1,57 @@
-"""Sauvegarde / restauration complète de la session en un seul fichier JSON
-(registre des dossiers + journal des transmissions), en plus des exports CSV
-par table déjà disponibles sur chaque page. Utile pour ne pas perdre le
-travail entre deux sessions, Streamlit ne conservant rien côté serveur."""
+"""Sauvegarde / restauration complète en un seul fichier JSON (registre des
+dossiers + journal des transmissions + pièces jointes), en plus des exports
+CSV par table déjà disponibles sur chaque page.
+
+Depuis l'ajout du stockage SQLite partagé (voir `utils/db.py`), les données
+survivent déjà entre deux sessions de navigateur tant que le serveur tourne
+et que son disque est persistant — cette sauvegarde JSON reste néanmoins le
+filet de sécurité ultime : portable, lisible hors de l'application, et seul
+recours si l'hébergement choisi ne garantit pas un disque persistant (c'est
+le cas, par exemple, de Streamlit Community Cloud)."""
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import datetime
 
 import pandas as pd
+import streamlit as st
 
-from .dossiers import REGISTER_COLUMNS, get_register, set_register
-from .transmissions import LOG_COLUMNS, get_log, set_log
-from .attachments import get_attachments, set_attachments
+from . import db
+from .dossiers import get_register
+from .transmissions import get_log
+from .attachments import get_attachments
+
+_DISPLAY_TO_DB_DOSSIER = {
+    "Date de réception": "date_reception",
+    "Objet": "objet",
+    "Type de dossier": "type_dossier",
+    "Canal de réception": "canal_reception",
+    "Direction concernée": "direction_concernee",
+    "Service destinataire actuel": "service_destinataire",
+    "Statut": "statut",
+    "Priorité": "priorite",
+    "Échéance prévue": "echeance_prevue",
+    "Agent en charge": "agent_en_charge",
+    "Référence externe (optionnel)": "reference_externe",
+    "Notes": "notes",
+}
+
+_DISPLAY_TO_DB_TRANSMISSION = {
+    "N° dossier": "numero_dossier",
+    "Date": "date",
+    "Service source": "service_source",
+    "Service destination": "service_destination",
+    "Sens": "sens",
+    "Délai imparti (jours)": "delai_imparti_jours",
+    "Commentaire": "commentaire",
+}
+
+
+def _poste_auteur() -> str | None:
+    poste = st.session_state.get("poste_courant")
+    if poste and str(poste).startswith("("):
+        return None
+    return poste
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict]:
@@ -35,20 +75,23 @@ def build_backup_json() -> str:
 
 def restore_backup_json(content: str) -> tuple[int, int, int]:
     payload = json.loads(content)
+    poste_auteur = _poste_auteur()
 
-    reg = pd.DataFrame(payload.get("registre_dossiers", [])).reindex(columns=REGISTER_COLUMNS)
-    if not reg.empty:
-        reg["Date de réception"] = pd.to_datetime(reg["Date de réception"], errors="coerce")
-        reg["Échéance prévue"] = pd.to_datetime(reg["Échéance prévue"], errors="coerce")
-    set_register(reg)
+    reg_records = payload.get("registre_dossiers", [])
+    dossier_rows = []
+    for rec in reg_records:
+        row = {db_col: rec.get(disp_col) for disp_col, db_col in _DISPLAY_TO_DB_DOSSIER.items()}
+        row["numero"] = rec.get("N° dossier")
+        dossier_rows.append(row)
+    n_reg = db.replace_all_dossiers(dossier_rows, poste_auteur, "Restauration de sauvegarde")
 
-    log = pd.DataFrame(payload.get("journal_transmissions", [])).reindex(columns=LOG_COLUMNS)
-    if not log.empty:
-        log["Date"] = pd.to_datetime(log["Date"], errors="coerce")
-        log["Délai imparti (jours)"] = pd.to_numeric(log["Délai imparti (jours)"], errors="coerce")
-    set_log(log)
+    log_records = payload.get("journal_transmissions", [])
+    trans_rows = [{db_col: rec.get(disp_col) for disp_col, db_col in _DISPLAY_TO_DB_TRANSMISSION.items()}
+                  for rec in log_records]
+    n_log = db.replace_all_transmissions(trans_rows, poste_auteur, "Restauration de sauvegarde")
 
     pieces = payload.get("pieces_jointes", {})
-    set_attachments(pieces if isinstance(pieces, dict) else {})
+    n_pj = db.replace_all_attachments(pieces if isinstance(pieces, dict) else {}, poste_auteur,
+                                       "Restauration de sauvegarde")
 
-    return len(reg), len(log), sum(len(v) for v in (pieces or {}).values())
+    return n_reg, n_log, n_pj

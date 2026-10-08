@@ -1,5 +1,6 @@
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from utils.ui import (
@@ -10,6 +11,7 @@ from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.transmissions import get_log
 from utils.session import current_post_selector
 from utils.backup import build_backup_json, restore_backup_json
+from utils.exports import build_excel_export
 
 st.set_page_config(page_title=APP_TITLE, page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
@@ -98,7 +100,28 @@ else:
         st.dataframe(
             retard_view[["N° dossier", "Objet", "Direction concernée", "Service destinataire actuel",
                          "Statut", "Échéance prévue", "Jours de retard", "Agent en charge"]],
-            use_container_width=True, hide_index=True,
+            width='stretch', hide_index=True,
+            column_config={"Échéance prévue": st.column_config.DateColumn("Échéance prévue")},
+        )
+
+    st.write("")
+    st.markdown("**⏰ Rappels — échéances à venir (7 jours), non clôturés et pas déjà en retard**")
+    today_ts = pd.Timestamp(date.today())
+    a_venir = view[
+        (~view["Statut"].isin(STATUTS_CLOS)) & (~view["En retard"]) &
+        view["Échéance prévue"].notna() &
+        ((view["Échéance prévue"] - today_ts).dt.days.between(0, 7))
+    ].copy()
+    if a_venir.empty:
+        st.caption("Aucune échéance dans les 7 prochains jours parmi les dossiers affichés.")
+    else:
+        a_venir["Jours restants"] = (a_venir["Échéance prévue"] - today_ts).dt.days
+        st.dataframe(
+            a_venir.sort_values("Jours restants")[
+                ["N° dossier", "Objet", "Service destinataire actuel", "Échéance prévue",
+                 "Jours restants", "Agent en charge"]],
+            width='stretch', hide_index=True,
+            column_config={"Échéance prévue": st.column_config.DateColumn("Échéance prévue")},
         )
 
 st.write("")
@@ -109,7 +132,7 @@ st.markdown(
 )
 
 st.write("")
-section_title("SAUVEGARDE / RESTAURATION COMPLÈTE DE LA SESSION")
+section_title("SAUVEGARDE / RESTAURATION, ET EXPORT DE PARTAGE")
 bc1, bc2 = st.columns(2)
 with bc1:
     st.download_button(
@@ -118,8 +141,19 @@ with bc1:
         f"sauvegarde_suivi_dossiers_aer_{date.today().isoformat()}.json",
         "application/json",
     )
-    st.caption("Contient le registre des dossiers, le journal des transmissions ET les pièces jointes "
-               "éventuelles, en un seul fichier.")
+    st.caption("Format machine, ré-importable ci-contre : registre, journal des transmissions ET "
+               "pièces jointes, en un seul fichier. Depuis l'ajout du stockage partagé, ce n'est plus "
+               "l'unique moyen de ne rien perdre — c'est désormais le filet de sécurité ultime, utile "
+               "surtout si l'hébergement choisi ne garantit pas un disque persistant.")
+    st.download_button(
+        "📊 Télécharger un export Excel (lecture seule, partage/impression)",
+        build_excel_export(),
+        f"export_suivi_dossiers_aer_{date.today().isoformat()}.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    st.caption("Registre, transmissions, pièces jointes (métadonnées) et journal d'audit, chacun sur "
+               "sa propre feuille — pratique pour partager un instantané à la hiérarchie sans donner "
+               "accès à l'application elle-même. Non ré-importable (contrairement à la sauvegarde JSON).")
 with bc2:
     up = st.file_uploader("📤 Restaurer une sauvegarde (JSON)", type=["json"], key="backup_upload")
     if up is not None:

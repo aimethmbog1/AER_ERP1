@@ -65,11 +65,11 @@ else:
             matches_reg[["N° dossier", "Objet", "Type de dossier", "Direction concernée",
                          "Service destinataire actuel", "Statut", "Référence externe (optionnel)",
                          "Agent en charge"]],
-            use_container_width=True, hide_index=True,
+            width='stretch', hide_index=True,
         )
     if not matches_log.empty:
         st.markdown("**Transmissions (commentaires)**")
-        st.dataframe(matches_log, use_container_width=True, hide_index=True)
+        st.dataframe(matches_log, width='stretch', hide_index=True)
     if matches_reg.empty and matches_log.empty:
         st.warning("Aucun résultat pour cette recherche.")
 
@@ -97,7 +97,10 @@ else:
         colonnes = ["N° d'ordre", "Date de réception", "N° dossier", "Objet", "Type de dossier",
                     "Référence externe (optionnel)", "Direction concernée", "Service destinataire actuel",
                     "Statut", "Agent en charge"]
-        st.dataframe(courrier_view[colonnes], use_container_width=True, hide_index=True, height=420)
+        st.dataframe(
+            courrier_view[colonnes], width='stretch', hide_index=True, height=420,
+            column_config={"Date de réception": st.column_config.DateColumn("Date de réception")},
+        )
         st.download_button(
             "⬇️ Télécharger le registre du courrier (CSV)",
             courrier_view[colonnes].to_csv(index=False).encode("utf-8"),

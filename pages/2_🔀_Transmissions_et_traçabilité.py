@@ -8,13 +8,14 @@ from utils.ui import (
     PAGE_ICON, inject_base_style, section_title, kpi_row, plotly_base_layout, NAVY, RED, AMBER, GREEN,
     render_sidebar_footer, render_page_header,
 )
-from utils.dossiers import get_register, set_register
+from utils.dossiers import get_register, update_service_destinataire
 from utils.transmissions import (
     get_log, set_log, add_transmission, history_for, temps_par_service,
     suggested_return_target, generer_bordereau,
 )
 from utils.orgchart import allowed_destinations, all_node_ids, depth_of, NODES
 from utils.session import current_post_selector
+from utils import db
 
 st.set_page_config(page_title="Transmissions & traçabilité — AER", page_icon=PAGE_ICON, layout="wide")
 inject_base_style()
@@ -98,20 +99,22 @@ with st.container(border=True):
 
     tc3, tc4, tc5 = st.columns(3)
     t_date = tc3.date_input("Date de la transmission", value=date.today(), key="trans_date")
-    t_delai = tc4.number_input("Délai imparti à cette étape (jours, optionnel)", min_value=0, step=1,
-                                value=0, key="trans_delai")
+    with tc4:
+        t_delai_actif = st.checkbox("Fixer un délai imparti", value=False, key="trans_delai_actif")
+        t_delai = st.number_input("Délai (jours)", min_value=1, step=1, value=5, key="trans_delai",
+                                   disabled=not t_delai_actif,
+                                   help="Désactivé par défaut : aucun délai n'est alors enregistré, plutôt "
+                                        "qu'un délai de 0 jour qui serait ambigu.")
     t_agent_dest = tc5.text_input("Agent destinataire (optionnel)", key="trans_agent_dest")
     t_commentaire = st.text_input("Commentaire (motif, pièce jointe, instruction...)", key="trans_commentaire")
 
     if st.button("Enregistrer la transmission", type="primary", disabled=(t_dest is None)):
         ok, message = add_transmission(
             dossier_id, t_date, t_source, t_dest, t_commentaire,
-            delai_impartis_jours=(t_delai or None),
+            delai_impartis_jours=(int(t_delai) if t_delai_actif else None),
         )
         if ok:
-            reg = get_register()
-            reg.loc[reg["N° dossier"] == dossier_id, "Service destinataire actuel"] = t_dest
-            set_register(reg)
+            update_service_destinataire(dossier_id, t_dest)
             st.success(message)
             st.session_state["last_bordereau"] = generer_bordereau(
                 dossier_id, dossier_row["Objet"], t_source, t_dest, t_date, t_commentaire, t_agent_dest,
@@ -133,7 +136,8 @@ hist = history_for(hist_id)
 if hist.empty:
     st.info("Aucune transmission enregistrée pour ce dossier pour l'instant.")
 else:
-    st.dataframe(hist, use_container_width=True, hide_index=True)
+    st.dataframe(hist, width='stretch', hide_index=True,
+                 column_config={"Date": st.column_config.DateColumn("Date")})
 
     today = pd.Timestamp(pd.Timestamp.now().date())
     frise = hist.sort_values("Date").reset_index(drop=True)
@@ -147,7 +151,7 @@ else:
                        title=f"Trajet du dossier {hist_id} entre services")
     fig.update_yaxes(autorange="reversed")
     fig = plotly_base_layout(fig, height=max(220, 60 * len(seg_df)))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 st.write("")
 section_title("JOURNAL COMPLET DES TRANSMISSIONS")
@@ -158,7 +162,7 @@ else:
     lc1, rc1 = st.columns([1.3, 1])
     with lc1:
         edited_log = st.data_editor(
-            log, use_container_width=True, hide_index=True, num_rows="dynamic",
+            log, width='stretch', hide_index=True, num_rows="dynamic",
             height=min(60 + 36 * (len(log) + 1), 420),
             column_config={
                 "Date": st.column_config.DateColumn("Date"),
@@ -178,7 +182,7 @@ else:
                      title="Postes les plus sollicités (nombre de dossiers reçus)")
         fig = plotly_base_layout(fig, legend=False)
         fig.update_xaxes(tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     st.write("")
     section_title("TEMPS PASSÉ PAR SERVICE — ET DÉPASSEMENTS DE DÉLAI IMPARTI")
@@ -199,10 +203,32 @@ else:
                          color_discrete_sequence=[AMBER], title="Délai moyen de traitement par service (jours)")
             fig = plotly_base_layout(fig, legend=False)
             fig.update_xaxes(tickangle=-35)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         with c2:
             tps_display = tps.sort_values("Jours passés", ascending=False).copy()
             tps_display["Dépassement"] = tps_display["Dépassement"].map({True: "⚠️ Oui", False: ""})
-            st.dataframe(tps_display, use_container_width=True, hide_index=True, height=380)
+            st.dataframe(tps_display, width='stretch', hide_index=True, height=380)
+
+st.write("")
+section_title("🕵️ JOURNAL D'AUDIT — QUI A MODIFIÉ QUOI, QUAND")
+st.caption(
+    "Toute transmission, tout ajout/modification/suppression direct du registre ou des pièces "
+    "jointes, et toute restauration de sauvegarde sont journalisés ici — y compris les changements "
+    "qui ne passent pas par une transmission en bonne et due forme (ex. statut modifié directement "
+    "dans le tableau du Registre). Comble le trou de traçabilité identifié : sans ce journal, une "
+    "modification directe du registre n'était tracée nulle part."
+)
+audit_scope = st.radio("Portée", ["Tous les dossiers", "Un dossier en particulier"],
+                        horizontal=True, key="audit_scope")
+if audit_scope == "Un dossier en particulier":
+    audit_dossier = st.selectbox("Dossier", dossier_options, key="audit_dossier_choice")
+    audit_rows = db.fetch_audit_log(numero_dossier=audit_dossier.split(" — ")[0])
+else:
+    audit_rows = db.fetch_audit_log()
+
+if not audit_rows:
+    st.info("Le journal d'audit est vide pour l'instant.")
+else:
+    st.dataframe(pd.DataFrame(audit_rows), width='stretch', hide_index=True, height=360)
 
 render_sidebar_footer()

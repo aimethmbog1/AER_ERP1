@@ -5,3 +5,4 @@ __pycache__/
 TEST1/
 .agents/
 .claude/
+.pytest_cache/

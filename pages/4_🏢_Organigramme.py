@@ -119,7 +119,7 @@ fig.update_layout(title="Organigramme AER — voyants de statut par poste", show
 fig.update_xaxes(visible=False)
 fig.update_yaxes(visible=False)
 fig = plotly_base_layout(fig, height=680, legend=True)
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width='stretch')
 
 if register.empty:
     st.info("Tous les voyants sont gris : aucun dossier n'a encore été saisi (voir la page Registre).")
