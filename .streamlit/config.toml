@@ -1,0 +1,86 @@
+# Thème « AER — institutionnel » : bleu marine + accent teal, décliné en
+# variante claire et sombre. C'est désormais le MÉCANISME PRINCIPAL de
+# personnalisation visuelle (conforme à la compétence developing-with-streamlit) ;
+# le peu de CSS encore présent dans utils/ui.py est un recours volontaire et
+# restreint (bandeau de marque, dégradé de la barre latérale, animations),
+# jamais une duplication du thème lui-même — les composants CSS lisent
+# `st.context.theme` pour rester synchronisés avec le thème actif.
+#
+# Palette reprise de l'ancien système CSS (utils/ui.py) pour ne rien perdre
+# de l'identité déjà choisie : bleu institutionnel "AER" (#0B3D62), accent
+# teal (#0E8FA3), or sobre (#C9A24B) — + une variante sombre dérivée en
+# éclaircissant les mêmes teintes pour garder un contraste correct sur fond
+# sombre (règle de base de l'accessibilité : une couleur « lue » sur fond
+# clair ne garde pas le même contraste sur fond sombre sans être éclaircie).
+
+[theme]
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+codeFontSize = "0.85rem"
+baseFontSize = 15
+baseFontWeight = 400
+headingFontSizes = ["34px", "26px", "21px", "18px", "16px", "14px"]
+headingFontWeights = [700, 700, 700, 600, 600, 600]
+linkUnderline = true
+baseRadius = "10px"
+buttonRadius = "8px"
+showWidgetBorder = true
+showSidebarBorder = false
+
+[theme.light]
+primaryColor = "#0E8FA3"
+backgroundColor = "#F4F6F8"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1C2733"
+borderColor = "#E2E6EA"
+linkColor = "#2E6DA4"
+codeBackgroundColor = "#EEF1F4"
+codeTextColor = "#1C2733"
+chartCategoricalColors = ["#0B3D62", "#0E8FA3", "#C9A24B", "#1E8449", "#C0392B", "#B8750A", "#6B7280", "#2E6DA4"]
+grayColor = "#6B7280"
+blueColor = "#2E6DA4"
+greenColor = "#1E8449"
+redColor = "#C0392B"
+yellowColor = "#C9A24B"
+orangeColor = "#B8750A"
+violetColor = "#6E5A95"
+dataframeBorderColor = "#E2E6EA"
+dataframeHeaderBackgroundColor = "#EEF1F4"
+
+[theme.light.sidebar]
+backgroundColor = "#0B3D62"
+secondaryBackgroundColor = "#082A46"
+codeBackgroundColor = "#0A3252"
+textColor = "#EAF1F8"
+borderColor = "#0A3252"
+primaryColor = "#36C7DB"
+linkColor = "#8FD4DE"
+
+[theme.dark]
+primaryColor = "#2BB9CF"
+backgroundColor = "#0A1620"
+secondaryBackgroundColor = "#11212E"
+textColor = "#E7EEF5"
+borderColor = "#22333F"
+linkColor = "#5B9BD5"
+codeBackgroundColor = "#17293B"
+codeTextColor = "#E7EEF5"
+chartCategoricalColors = ["#5B9BD5", "#2BB9CF", "#E3C26B", "#4FBE7E", "#E6684F", "#E0A23D", "#9AA5B1", "#8FB3DC"]
+grayColor = "#9AA5B1"
+blueColor = "#5B9BD5"
+greenColor = "#4FBE7E"
+redColor = "#E6684F"
+yellowColor = "#E3C26B"
+orangeColor = "#E0A23D"
+violetColor = "#9B8AC4"
+dataframeBorderColor = "#22333F"
+dataframeHeaderBackgroundColor = "#17293B"
+
+[theme.dark.sidebar]
+backgroundColor = "#061019"
+secondaryBackgroundColor = "#0A1620"
+codeBackgroundColor = "#11212E"
+textColor = "#EAF1F8"
+borderColor = "#17293B"
+primaryColor = "#2BB9CF"
+linkColor = "#8FD4DE"
