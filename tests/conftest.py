@@ -31,6 +31,7 @@ def _clean_database():
         conn.execute("DELETE FROM dossiers")
         conn.execute("DELETE FROM transmissions")
         conn.execute("DELETE FROM attachments")
+        conn.execute("DELETE FROM approbations")
         conn.execute("DELETE FROM audit_log")
         conn.execute("DELETE FROM sqlite_sequence")  # réinitialise aussi les compteurs auto-incrémentés
     yield

@@ -20,6 +20,7 @@ from . import db
 from .dossiers import get_register
 from .transmissions import get_log
 from .attachments import get_attachments
+from .workflow import get_approbations
 
 _DISPLAY_TO_DB_DOSSIER = {
     "Date de réception": "date_reception",
@@ -46,6 +47,19 @@ _DISPLAY_TO_DB_TRANSMISSION = {
     "Commentaire": "commentaire",
 }
 
+_DISPLAY_TO_DB_APPROBATION = {
+    "N° dossier": "numero_dossier",
+    "Étape": "etape",
+    "Demandé par": "demande_par",
+    "Approbateur": "approbateur",
+    "Statut": "statut",
+    "Date de demande": "date_demande",
+    "Échéance": "echeance",
+    "Date de décision": "date_decision",
+    "Commentaire": "commentaire",
+    "Commentaire de décision": "decision_commentaire",
+}
+
 
 def _poste_auteur() -> str | None:
     poste = st.session_state.get("poste_courant")
@@ -69,11 +83,12 @@ def build_backup_json() -> str:
         "registre_dossiers": _df_to_records(get_register()),
         "journal_transmissions": _df_to_records(get_log()),
         "pieces_jointes": get_attachments(),
+        "approbations": _df_to_records(get_approbations()),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def restore_backup_json(content: str) -> tuple[int, int, int]:
+def restore_backup_json(content: str) -> tuple[int, int, int, int]:
     payload = json.loads(content)
     poste_auteur = _poste_auteur()
 
@@ -94,4 +109,12 @@ def restore_backup_json(content: str) -> tuple[int, int, int]:
     n_pj = db.replace_all_attachments(pieces if isinstance(pieces, dict) else {}, poste_auteur,
                                        "Restauration de sauvegarde")
 
-    return n_reg, n_log, n_pj
+    # Clé absente dans une sauvegarde prise avant l'ajout du workflow
+    # d'approbation (voir `utils/workflow.py`) : `.get(..., [])` la rend
+    # restaurable sans erreur, simplement sans aucune approbation à reprendre.
+    appr_records = payload.get("approbations", [])
+    appr_rows = [{db_col: rec.get(disp_col) for disp_col, db_col in _DISPLAY_TO_DB_APPROBATION.items()}
+                 for rec in appr_records]
+    n_appr = db.replace_all_approbations(appr_rows, poste_auteur, "Restauration de sauvegarde")
+
+    return n_reg, n_log, n_pj, n_appr

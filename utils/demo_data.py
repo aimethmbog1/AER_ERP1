@@ -23,7 +23,7 @@ from .backup import restore_backup_json
 SEED_PATH = Path(__file__).resolve().parent.parent / "seed_data" / "aer_demo_300.json"
 
 
-def seed_demo_data_if_empty() -> tuple[int, int, int] | None:
+def seed_demo_data_if_empty() -> tuple[int, int, int, int] | None:
     """Restaure le jeu de démonstration si — et seulement si — le registre
     est actuellement vide. Ne touche jamais à des données déjà saisies :
     aucune vérification de contenu au-delà de « la table dossiers est-elle
@@ -50,5 +50,6 @@ def reset_all_data() -> None:
         conn.execute("DELETE FROM dossiers")
         conn.execute("DELETE FROM transmissions")
         conn.execute("DELETE FROM attachments")
+        conn.execute("DELETE FROM approbations")
         db.log_audit(conn, None, "(réinitialisation complète)", None, "Toutes les données supprimées",
                      None, "Paramètres & thème")

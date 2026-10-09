@@ -10,12 +10,14 @@ import pandas as pd
 
 from .dossiers import get_register, with_derived_columns
 from .transmissions import get_log
+from .workflow import get_approbations
 from . import db
 
 
 def build_excel_export() -> bytes:
     registre = with_derived_columns(get_register())
     transmissions = get_log()
+    approbations = get_approbations()
     audit = pd.DataFrame(db.fetch_audit_log(limit=2000))
 
     pieces = db.fetch_all_attachments_for_backup()
@@ -34,6 +36,8 @@ def build_excel_export() -> bytes:
             writer, sheet_name="Registre", index=False)
         (transmissions if not transmissions.empty else pd.DataFrame(columns=["(journal vide)"])).to_excel(
             writer, sheet_name="Transmissions", index=False)
+        (approbations if not approbations.empty else pd.DataFrame(columns=["(aucune approbation)"])).to_excel(
+            writer, sheet_name="Approbations", index=False)
         (pieces_df if not pieces_df.empty else pd.DataFrame(columns=["(aucune pièce jointe)"])).to_excel(
             writer, sheet_name="Pièces jointes", index=False)
         (audit if not audit.empty else pd.DataFrame(columns=["(journal d'audit vide)"])).to_excel(

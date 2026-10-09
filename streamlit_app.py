@@ -31,6 +31,7 @@ PAGES = {
     "Dossiers": [
         st.Page("app_pages/registre.py", title="Registre des dossiers", icon=":material/folder_managed:"),
         st.Page("app_pages/transmissions.py", title="Transmissions & traçabilité", icon=":material/sync_alt:"),
+        st.Page("app_pages/fiche_dossier.py", title="Fiche dossier", icon=":material/description:"),
         st.Page("app_pages/recherche.py", title="Recherche & registre courrier", icon=":material/search:"),
     ],
     "Pilotage": [

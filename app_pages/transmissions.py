@@ -24,6 +24,10 @@ poste_courant = current_post_selector()
 render_page_header("🔀", "Transmissions & traçabilité",
                     "Journal des mouvements d'un dossier entre services, avec un routage contraint par "
                     "l'organigramme réel — la traçabilité que le diagnostic identifie comme manquante.")
+st.caption("ℹ️ Pour faire attendre une **décision formelle** (Approuvé / Rejeté) d'un poste précis sur un "
+           "dossier, sans forcément le déplacer, utilisez le workflow d'approbation de la page "
+           "**Fiche dossier** — une transmission ci-dessous reste le bon outil pour déplacer un dossier "
+           "d'un poste à l'autre.")
 
 with st.expander("ℹ️ Règle de routage appliquée", expanded=False):
     st.markdown(

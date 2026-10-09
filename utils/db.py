@@ -99,9 +99,27 @@ CREATE TABLE IF NOT EXISTS audit_log (
     source TEXT
 );
 
+CREATE TABLE IF NOT EXISTS approbations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero_dossier TEXT NOT NULL,
+    etape TEXT,
+    demande_par TEXT,
+    approbateur TEXT,
+    statut TEXT NOT NULL,
+    date_demande TEXT,
+    echeance TEXT,
+    date_decision TEXT,
+    commentaire TEXT,
+    decision_commentaire TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_transmissions_numero ON transmissions(numero_dossier);
 CREATE INDEX IF NOT EXISTS idx_attachments_numero ON attachments(numero_dossier);
 CREATE INDEX IF NOT EXISTS idx_audit_numero ON audit_log(numero_dossier);
+CREATE INDEX IF NOT EXISTS idx_approbations_numero ON approbations(numero_dossier);
+CREATE INDEX IF NOT EXISTS idx_approbations_approbateur ON approbations(approbateur);
+CREATE INDEX IF NOT EXISTS idx_approbations_statut ON approbations(statut);
 """
 
 
@@ -206,6 +224,7 @@ def delete_dossier(dossier_id: int, numero: str, snapshot: str, poste_auteur: st
         log_audit(conn, numero, "(dossier supprimé)", snapshot, None, poste_auteur, source)
         conn.execute("DELETE FROM dossiers WHERE id=?", (dossier_id,))
         conn.execute("DELETE FROM transmissions WHERE numero_dossier=?", (numero,))
+        conn.execute("DELETE FROM approbations WHERE numero_dossier=?", (numero,))
         for att in conn.execute("SELECT chemin_fichier FROM attachments WHERE numero_dossier=?",
                                  (numero,)).fetchall():
             try:
@@ -451,3 +470,119 @@ def fetch_audit_log(numero_dossier: str | None = None, limit: int = 500) -> list
     cols = ["Horodatage", "N° dossier", "Champ modifié", "Ancienne valeur", "Nouvelle valeur",
             "Poste auteur", "Source"]
     return [dict(zip(cols, r)) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Approbations — moteur de workflow formalisé, en complément du routage par
+# transmission. Une transmission (voir ci-dessus) déplace un dossier d'un
+# poste à l'autre ; une approbation est une DÉCISION attendue d'un poste
+# précis sur un dossier (inspiré du moteur de workflow/BPM d'Oracle Cloud
+# ERP : demande → décision Approuvé/Rejeté, avec délégation possible et une
+# échéance propre à la demande, distincte de l'échéance globale du dossier).
+# Les deux mécanismes sont indépendants : une demande d'approbation n'est pas
+# nécessaire pour transmettre un dossier, elle s'ajoute quand une étape
+# nécessite explicitement une décision validée avant de poursuivre.
+# ---------------------------------------------------------------------------
+APPROBATION_DB_COLUMNS = [
+    "numero_dossier", "etape", "demande_par", "approbateur", "statut", "date_demande",
+    "echeance", "date_decision", "commentaire", "decision_commentaire",
+]
+
+STATUT_EN_ATTENTE = "En attente"
+STATUT_APPROUVE = "Approuvé"
+STATUT_REJETE = "Rejeté"
+STATUTS_APPROBATION = [STATUT_EN_ATTENTE, STATUT_APPROUVE, STATUT_REJETE]
+
+
+def fetch_approbations(numero_dossier: str | None = None, approbateur: str | None = None,
+                        statut: str | None = None) -> list[dict]:
+    conn = get_connection()
+    clauses, params = [], []
+    if numero_dossier:
+        clauses.append("numero_dossier=?")
+        params.append(numero_dossier)
+    if approbateur:
+        clauses.append("approbateur=?")
+        params.append(approbateur)
+    if statut:
+        clauses.append("statut=?")
+        params.append(statut)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"SELECT id, {', '.join(APPROBATION_DB_COLUMNS)} FROM approbations {where} ORDER BY id DESC",
+        params,
+    ).fetchall()
+    cols = ["id"] + APPROBATION_DB_COLUMNS
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def insert_approbation(fields: dict, poste_auteur: str | None, source: str = "Demande d'approbation") -> int:
+    conn = get_connection()
+    with conn:
+        values = dict(fields)
+        values.setdefault("statut", STATUT_EN_ATTENTE)
+        values.setdefault("date_demande", _now()[:10])
+        cur = conn.execute(
+            f"INSERT INTO approbations ({', '.join(APPROBATION_DB_COLUMNS)}, created_at) "
+            f"VALUES ({', '.join(['?'] * len(APPROBATION_DB_COLUMNS))}, ?)",
+            tuple(values.get(c) for c in APPROBATION_DB_COLUMNS) + (_now(),),
+        )
+        log_audit(conn, fields.get("numero_dossier"), "(approbation demandée)", None,
+                   f"{fields.get('etape') or 'Étape'} → {fields.get('approbateur')}", poste_auteur, source)
+    return cur.lastrowid
+
+
+def decide_approbation(approbation_id: int, decision: str, commentaire: str | None,
+                        poste_auteur: str | None, source: str = "Décision d'approbation") -> None:
+    conn = get_connection()
+    with conn:
+        row = conn.execute("SELECT numero_dossier, etape, statut FROM approbations WHERE id=?",
+                            (approbation_id,)).fetchone()
+        if row is None:
+            return
+        numero, etape, ancien_statut = row
+        conn.execute(
+            "UPDATE approbations SET statut=?, date_decision=?, decision_commentaire=? WHERE id=?",
+            (decision, _now()[:10], commentaire, approbation_id),
+        )
+        log_audit(conn, numero, f"approbation.{etape or approbation_id}", ancien_statut, decision,
+                  poste_auteur, source)
+
+
+def delegate_approbation(approbation_id: int, nouvel_approbateur: str, commentaire: str | None,
+                          poste_auteur: str | None, source: str = "Délégation d'approbation") -> None:
+    conn = get_connection()
+    with conn:
+        row = conn.execute("SELECT numero_dossier, approbateur FROM approbations WHERE id=?",
+                            (approbation_id,)).fetchone()
+        if row is None:
+            return
+        numero, ancien_approbateur = row
+        note = commentaire or ""
+        conn.execute(
+            "UPDATE approbations SET approbateur=?, commentaire=? WHERE id=?",
+            (nouvel_approbateur, (note + (" " if note else "") + f"(délégué par {ancien_approbateur})").strip(),
+             approbation_id),
+        )
+        log_audit(conn, numero, "approbation.approbateur", ancien_approbateur, nouvel_approbateur,
+                  poste_auteur, source)
+
+
+def replace_all_approbations(records: list[dict], poste_auteur: str | None, source: str) -> int:
+    """Utilisé par la restauration de sauvegarde JSON complète (voir
+    `utils/backup.py`) — même logique que `replace_all_transmissions`."""
+    conn = get_connection()
+    with conn:
+        conn.execute("DELETE FROM approbations")
+        now = _now()
+        for rec in records:
+            values = dict(rec)
+            values.setdefault("statut", STATUT_EN_ATTENTE)
+            conn.execute(
+                f"INSERT INTO approbations ({', '.join(APPROBATION_DB_COLUMNS)}, created_at) "
+                f"VALUES ({', '.join(['?'] * len(APPROBATION_DB_COLUMNS))}, ?)",
+                tuple(values.get(c) for c in APPROBATION_DB_COLUMNS) + (now,),
+            )
+        log_audit(conn, None, "(approbations)", None, f"{len(records)} approbation(s) restaurée(s)",
+                  poste_auteur, source)
+    return len(records)

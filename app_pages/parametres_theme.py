@@ -12,6 +12,7 @@ from utils.ui import (
 from utils.demo_data import reset_all_data, seed_demo_data_if_empty
 from utils.dossiers import get_register
 from utils.transmissions import get_log
+from utils.workflow import get_approbations
 from utils import db
 
 inject_base_style()
@@ -63,17 +64,19 @@ section_title("DONNÉES")
 nb_dossiers = len(get_register())
 nb_transmissions = len(get_log())
 nb_audit = len(db.fetch_audit_log(limit=100000))
-d1, d2, d3 = st.columns(3)
+nb_approbations = len(get_approbations())
+d1, d2, d3, d4 = st.columns(4)
 d1.metric("Dossiers", nb_dossiers, border=True)
 d2.metric("Transmissions", nb_transmissions, border=True)
-d3.metric("Entrées du journal d'audit", nb_audit, border=True)
+d3.metric("Demandes d'approbation", nb_approbations, border=True)
+d4.metric("Entrées du journal d'audit", nb_audit, border=True)
 
 with st.expander("⚠️ Actions globales (irréversibles)", expanded=False):
     rc1, rc2 = st.columns(2)
     with rc1:
         st.markdown("**Réinitialiser les données**")
-        st.caption("Supprime tous les dossiers, transmissions et pièces jointes. Le journal d'audit "
-                   "garde une trace de cette réinitialisation elle-même.")
+        st.caption("Supprime tous les dossiers, transmissions, pièces jointes et demandes d'approbation. "
+                   "Le journal d'audit garde une trace de cette réinitialisation elle-même.")
         if st.button("Réinitialiser les données", key="btn_reset"):
             st.session_state["_confirm_reset"] = True
             st.rerun()

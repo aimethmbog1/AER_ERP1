@@ -132,6 +132,92 @@ def test_replace_all_dossiers_remplace_integralement():
     assert rows[0]["numero"] == "AER-2026-9999"
 
 
+def test_insert_approbation_et_fetch():
+    numero = db.insert_dossier(_champs_dossier(), poste_auteur="Poste test")
+    appr_id = db.insert_approbation({
+        "numero_dossier": numero, "etape": "Validation du budget", "demande_par": "Poste demandeur",
+        "approbateur": "Poste approbateur", "statut": db.STATUT_EN_ATTENTE,
+        "date_demande": "2026-09-05", "echeance": "2026-09-10", "date_decision": None,
+        "commentaire": "Contexte", "decision_commentaire": None,
+    }, "Poste demandeur")
+
+    rows = db.fetch_approbations(numero_dossier=numero)
+    assert len(rows) == 1
+    assert rows[0]["id"] == appr_id
+    assert rows[0]["statut"] == db.STATUT_EN_ATTENTE
+    assert rows[0]["approbateur"] == "Poste approbateur"
+
+    audit = db.fetch_audit_log(numero_dossier=numero)
+    assert any(a["Champ modifié"] == "(approbation demandée)" for a in audit)
+
+
+def test_decide_approbation_journalise_et_met_a_jour_le_statut():
+    numero = db.insert_dossier(_champs_dossier(), poste_auteur="Poste test")
+    appr_id = db.insert_approbation({
+        "numero_dossier": numero, "etape": "Avis juridique", "demande_par": "A", "approbateur": "B",
+        "statut": db.STATUT_EN_ATTENTE, "date_demande": "2026-09-05", "echeance": None,
+        "date_decision": None, "commentaire": None, "decision_commentaire": None,
+    }, "A")
+
+    db.decide_approbation(appr_id, db.STATUT_APPROUVE, "Conforme", "B")
+
+    rows = db.fetch_approbations(numero_dossier=numero)
+    assert rows[0]["statut"] == db.STATUT_APPROUVE
+    assert rows[0]["decision_commentaire"] == "Conforme"
+    assert rows[0]["date_decision"] is not None
+
+    audit = db.fetch_audit_log(numero_dossier=numero)
+    assert any(a["Nouvelle valeur"] == db.STATUT_APPROUVE for a in audit)
+
+
+def test_delegate_approbation_change_l_approbateur():
+    numero = db.insert_dossier(_champs_dossier(), poste_auteur="Poste test")
+    appr_id = db.insert_approbation({
+        "numero_dossier": numero, "etape": "Avis", "demande_par": "A", "approbateur": "B",
+        "statut": db.STATUT_EN_ATTENTE, "date_demande": "2026-09-05", "echeance": None,
+        "date_decision": None, "commentaire": None, "decision_commentaire": None,
+    }, "A")
+
+    db.delegate_approbation(appr_id, "C", "Je suis absent", "B")
+
+    rows = db.fetch_approbations(numero_dossier=numero)
+    assert rows[0]["approbateur"] == "C"
+    assert rows[0]["statut"] == db.STATUT_EN_ATTENTE  # toujours en attente, juste réassignée
+    assert "délégué par B" in rows[0]["commentaire"]
+
+
+def test_delete_dossier_cascade_approbations():
+    numero = db.insert_dossier(_champs_dossier(), poste_auteur="Poste test")
+    db.insert_approbation({
+        "numero_dossier": numero, "etape": "Avis", "demande_par": "A", "approbateur": "B",
+        "statut": db.STATUT_EN_ATTENTE, "date_demande": "2026-09-05", "echeance": None,
+        "date_decision": None, "commentaire": None, "decision_commentaire": None,
+    }, "A")
+    assert len(db.fetch_approbations(numero_dossier=numero)) == 1
+
+    dossier_id = db.fetch_dossiers()[0]["id"]
+    db.delete_dossier(dossier_id, numero, "snapshot", "Poste test", "test")
+
+    assert db.fetch_approbations(numero_dossier=numero) == []
+
+
+def test_replace_all_approbations_remplace_integralement():
+    db.insert_approbation({
+        "numero_dossier": "AER-2026-0001", "etape": "Ancienne", "demande_par": "A", "approbateur": "B",
+        "statut": db.STATUT_EN_ATTENTE, "date_demande": "2026-09-01", "echeance": None,
+        "date_decision": None, "commentaire": None, "decision_commentaire": None,
+    }, "A")
+    n = db.replace_all_approbations([{
+        "numero_dossier": "AER-2026-0002", "etape": "Restaurée", "demande_par": "X", "approbateur": "Y",
+        "statut": db.STATUT_EN_ATTENTE, "date_demande": "2026-09-05", "echeance": None,
+        "date_decision": None, "commentaire": None, "decision_commentaire": None,
+    }], poste_auteur="Poste test", source="Restauration de sauvegarde")
+    assert n == 1
+    rows = db.fetch_approbations()
+    assert len(rows) == 1
+    assert rows[0]["numero_dossier"] == "AER-2026-0002"
+
+
 def test_replace_all_transmissions_remplace_integralement():
     db.insert_transmission({
         "numero_dossier": "AER-2026-0001", "date": "2026-09-01", "service_source": "A",

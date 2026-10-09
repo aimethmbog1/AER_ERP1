@@ -1,11 +1,11 @@
 from datetime import date
 
-import pandas as pd
 import streamlit as st
 
 from utils.ui import inject_base_style, section_title, kpi_row, render_sidebar_footer, render_page_header
 from utils.dossiers import get_register, with_derived_columns, CANAL_COURRIER
 from utils.transmissions import get_log
+from utils.search import search_dossiers, search_transmissions
 from utils.session import current_post_selector
 
 inject_base_style()
@@ -36,22 +36,8 @@ requete = st.text_input("Rechercher", key="recherche_globale", placeholder="Ex. 
 if not requete:
     st.info("Saisissez un mot-clé ci-dessus pour lancer la recherche.")
 else:
-    if register.empty:
-        matches_reg = register
-    else:
-        champs = ["N° dossier", "Objet", "Agent en charge", "Notes", "Référence externe (optionnel)",
-                  "Service destinataire actuel", "Direction concernée"]
-        mask = pd.Series(False, index=register.index)
-        for champ in champs:
-            if champ in register.columns:
-                mask = mask | register[champ].astype(str).str.contains(requete, case=False, na=False)
-        matches_reg = register[mask]
-
-    if log.empty:
-        matches_log = log
-    else:
-        mask_log = log["Commentaire"].astype(str).str.contains(requete, case=False, na=False)
-        matches_log = log[mask_log]
+    matches_reg = search_dossiers(register, requete)
+    matches_log = search_transmissions(log, requete)
 
     kpi_row([
         ("Dossiers correspondants", str(len(matches_reg)), None),

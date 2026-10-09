@@ -20,6 +20,7 @@ PAGES = [
     PROJECT_ROOT / "app_pages" / "accueil.py",
     PROJECT_ROOT / "app_pages" / "registre.py",
     PROJECT_ROOT / "app_pages" / "transmissions.py",
+    PROJECT_ROOT / "app_pages" / "fiche_dossier.py",
     PROJECT_ROOT / "app_pages" / "tableau_de_bord.py",
     PROJECT_ROOT / "app_pages" / "organigramme.py",
     PROJECT_ROOT / "app_pages" / "recherche.py",
@@ -96,6 +97,47 @@ def test_formulaire_nouveau_dossier_fonctionne_de_bout_en_bout():
 
     rows = db.fetch_dossiers()
     assert any(r["objet"] == "Dossier saisi via le formulaire" for r in rows)
+
+
+def test_workflow_approbation_fonctionne_de_bout_en_bout_depuis_la_fiche_dossier():
+    """Soumet une demande d'approbation depuis le formulaire de la page Fiche
+    dossier, puis se positionne comme l'approbateur désigné et clique sur
+    « Approuver » — vérifie que la décision est bien journalisée en base,
+    exactement comme pour une interaction utilisateur réelle."""
+    numero = db.insert_dossier(_champs_dossier(), poste_auteur="Poste test")
+    fiche = PROJECT_ROOT / "app_pages" / "fiche_dossier.py"
+
+    at = AppTest.from_file(str(fiche), default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    at.text_input(key="appr_new_etape").set_value("Validation du budget")
+    at.selectbox(key="appr_new_approbateur").set_value(
+        "Service du Courrier, de la Liaison et des Archives"
+    )
+    boutons = [b for b in at.button if b.key == "appr_new_submit"]
+    assert boutons, "bouton de soumission de la demande d'approbation introuvable"
+    boutons[0].click().run()
+    assert not at.exception
+
+    approbations = db.fetch_approbations(numero_dossier=numero)
+    assert len(approbations) == 1
+    assert approbations[0]["statut"] == db.STATUT_EN_ATTENTE
+    appr_id = approbations[0]["id"]
+
+    # Se positionner comme le poste approbateur désigné, puis approuver.
+    at.selectbox(key="poste_courant_select").set_value(
+        "Service du Courrier, de la Liaison et des Archives"
+    ).run()
+    assert not at.exception
+
+    boutons_approuver = [b for b in at.button if b.key == f"appr_ok_{appr_id}"]
+    assert boutons_approuver, "bouton « Approuver » introuvable pour le poste approbateur"
+    boutons_approuver[0].click().run()
+    assert not at.exception
+
+    approbations_apres = db.fetch_approbations(numero_dossier=numero)
+    assert approbations_apres[0]["statut"] == db.STATUT_APPROUVE
 
 
 def test_entree_streamlit_app_se_charge_et_seme_la_demo():
