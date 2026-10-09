@@ -4,8 +4,8 @@ import pandas as pd
 import streamlit as st
 
 from utils.ui import (
-    APP_TITLE, APP_SUBTITLE, inject_base_style, section_title, kpi_row,
-    render_sidebar_footer, render_page_header, live_dot, theme_palette,
+    APP_TITLE, APP_SUBTITLE, ASSETS_DIR, inject_base_style, section_title, kpi_row,
+    render_sidebar_footer, render_page_header, render_hero_illustration, live_dot, theme_palette,
 )
 from utils.dossiers import get_register, with_derived_columns, STATUTS_CLOS
 from utils.transmissions import get_log
@@ -18,6 +18,7 @@ inject_base_style()
 poste_courant = current_post_selector()
 
 render_page_header("🏠", APP_TITLE, APP_SUBTITLE)
+render_hero_illustration()
 
 with st.expander("ℹ️ À propos de cette application — à lire avant de l'utiliser", expanded=False):
     st.markdown(
@@ -59,6 +60,13 @@ conséquences des difficultés de traçabilité, des retards de traitement, une 
   pas un disque persistant (c'est le cas de Streamlit Community Cloud).
         """
     )
+
+st.image(
+    str(ASSETS_DIR / "photos" / "installation_solaire_pexels.jpg"),
+    use_container_width=True,
+    caption="Illustration générique — photo libre de droits (Pexels, photographe Cristian Rojas) : "
+            "ce n'est pas un site de l'AER, seulement un visuel d'ambiance pour l'application.",
+)
 
 register = with_derived_columns(get_register())
 log = get_log()

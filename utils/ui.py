@@ -12,11 +12,14 @@ micro-interactions demandée explicitement par l'utilisateur. Chaque bloc CSS
 lit les couleurs actives via `st.context.theme` pour rester synchronisé avec
 le thème choisi, au lieu de dupliquer une palette figée.
 
-Emblème : aucun logo officiel de l'AER n'a pu être trouvé/téléchargé en ligne
-(voir le message envoyé à l'utilisateur) ; `assets/aer_emblem.svg` et
-`assets/aer_wordmark.svg` sont un lockup ORIGINAL créé pour ce prototype, à
-remplacer dès qu'un fichier officiel sera fourni (changez simplement
-`BRAND_ICON`/`BRAND_LOGO` ci-dessous — le reste de l'app n'a rien à savoir)."""
+Emblème : `assets/aer_logo_officiel.png` est le logo officiel de l'AER
+(fourni par l'utilisateur), fond détouré en transparent pour s'intégrer
+proprement sur le dégradé marine de la barre latérale ;
+`assets/aer_logo_officiel_icon.png` en est un recadrage carré (le blason
+seul, sans le bandeau de texte) pour l'icône compacte affichée quand la
+barre latérale est réduite. Les anciens `assets/aer_emblem.svg` /
+`assets/aer_wordmark.svg` (lockup original, provisoire) restent dans le
+dépôt pour mémoire mais ne sont plus référencés."""
 from __future__ import annotations
 
 import textwrap
@@ -31,8 +34,8 @@ APP_TITLE = "Suivi des dossiers — AER"
 APP_SUBTITLE = "Agence de l'Électrification Rurale · Gestion documentaire & traçabilité"
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
-BRAND_ICON = str(ASSETS_DIR / "aer_emblem.svg")
-BRAND_LOGO = str(ASSETS_DIR / "aer_wordmark.svg")
+BRAND_ICON = str(ASSETS_DIR / "aer_logo_officiel_icon.png")
+BRAND_LOGO = str(ASSETS_DIR / "aer_logo_officiel.png")
 
 # ---------------------------------------------------------------------------
 # Palette de référence (identique à .streamlit/config.toml) — utilisée pour
@@ -217,6 +220,23 @@ def inject_base_style():
         .block-container > div:nth-of-type(1) {{ animation: aer-fade-in 0.35s ease both; }}
 
         /* ====================================================================
+           6bis) Bandeau illustré (page d'accueil) — scène SVG originale
+           (panneaux solaires, pylône, maisons) : voir render_hero_illustration() */
+        .aer-hero-card {{
+            background: {p['surface']}; border: 1px solid {p['border']}; border-radius: 14px;
+            padding: 0.4rem 1rem 0; margin-bottom: 1.1rem; overflow: hidden;
+            box-shadow: 0 1px 4px rgba(16,24,40,0.06);
+            animation: aer-fade-in 0.5s ease both;
+        }}
+        .aer-hero-card svg {{ display: block; }}
+        .aer-hero-sun {{ transform-origin: 790px 56px; animation: aer-sun-pulse 3.2s ease-in-out infinite; }}
+        .aer-hero-wire {{ animation: aer-wire-flow 2.4s linear infinite; }}
+        .aer-hero-glint {{ animation: aer-glint-sweep 5s ease-in-out infinite; }}
+        @media (prefers-reduced-motion: reduce) {{
+            .aer-hero-sun, .aer-hero-wire, .aer-hero-glint {{ animation: none; }}
+        }}
+
+        /* ====================================================================
            7) Indicateur "en direct" (pastille clignotante) */
         .aer-live-dot {{
             display: inline-block; width: 8px; height: 8px; border-radius: 50%;
@@ -238,6 +258,15 @@ def inject_base_style():
             0% {{ box-shadow: 0 0 0 0 rgba(30,132,73,0.55); }}
             70% {{ box-shadow: 0 0 0 7px rgba(30,132,73,0); }}
             100% {{ box-shadow: 0 0 0 0 rgba(30,132,73,0); }}
+        }}
+        @keyframes aer-sun-pulse {{
+            0%, 100% {{ transform: scale(1); opacity: 1; }}
+            50% {{ transform: scale(1.08); opacity: 0.85; }}
+        }}
+        @keyframes aer-wire-flow {{ to {{ stroke-dashoffset: -120; }} }}
+        @keyframes aer-glint-sweep {{
+            0% {{ transform: translateX(0) skewX(-18deg); }}
+            45%, 100% {{ transform: translateX(820px) skewX(-18deg); }}
         }}
         </style>
     """
@@ -279,6 +308,110 @@ def render_page_header(icon: str, title: str, subtitle: str = ""):
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_hero_illustration():
+    """Bandeau illustré de la page d'accueil — une scène ORIGINALE (panneaux
+    solaires, pylône électrique, maisons, soleil), dessinée en SVG à partir
+    de la palette de marque active, pas une photo. Choix délibéré : les
+    photos fournies par l'utilisateur pour « animer » la plateforme
+    (cliché Alamy avec filigrane, et une image dont la source/licence n'est
+    pas établie) ne peuvent pas être intégrées à une application publique
+    sans droits clairs — voir le message envoyé à ce sujet. Cette
+    illustration est 100 % originale (aucun tracé copié), cohérente avec le
+    reste de l'identité visuelle, et légère (quelques Ko de SVG contre
+    plusieurs centaines de Ko de photo)."""
+    p = theme_palette()
+    svg = f"""
+    <svg viewBox="0 0 900 230" width="100%" height="auto" role="img" aria-label="Illustration : électrification rurale">
+      <defs>
+        <linearGradient id="aerSkyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{p['accent']}" stop-opacity="0.10"/>
+          <stop offset="100%" stop-color="{p['accent']}" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="aerPanelGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="{p['navy']}"/>
+          <stop offset="100%" stop-color="{p['accent']}"/>
+        </linearGradient>
+        <clipPath id="aerPanelClip">
+          <polygon points="470,150 640,150 610,80 500,80"/>
+        </clipPath>
+      </defs>
+
+      <rect x="0" y="0" width="900" height="230" fill="url(#aerSkyGrad)"/>
+
+      <g class="aer-hero-sun">
+        <circle cx="790" cy="56" r="26" fill="{p['gold']}"/>
+        <g stroke="{p['gold']}" stroke-width="3" stroke-linecap="round">
+          <line x1="790" y1="10" x2="790" y2="0"/>
+          <line x1="834" y1="56" x2="844" y2="56"/>
+          <line x1="821" y1="27" x2="828" y2="20"/>
+          <line x1="821" y1="85" x2="828" y2="92"/>
+          <line x1="759" y1="27" x2="752" y2="20"/>
+          <line x1="759" y1="85" x2="752" y2="92"/>
+        </g>
+      </g>
+
+      <line x1="0" y1="186" x2="900" y2="186" stroke="{p['border']}" stroke-width="2"/>
+
+      <!-- Pylône + lignes électriques -->
+      <g stroke="{p['text_muted']}" stroke-width="4" stroke-linecap="round">
+        <line x1="120" y1="186" x2="120" y2="70"/>
+        <line x1="92" y1="90" x2="148" y2="90"/>
+        <line x1="100" y1="112" x2="140" y2="112"/>
+      </g>
+      <path class="aer-hero-wire" d="M 96 90 Q 300 40 500 95" fill="none" stroke="{p['accent']}" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+      <path class="aer-hero-wire" d="M 144 90 Q 320 150 470 128" fill="none" stroke="{p['accent']}" stroke-width="2.5" stroke-dasharray="2 10" stroke-linecap="round"/>
+
+      <!-- Panneaux solaires -->
+      <polygon points="470,150 640,150 610,80 500,80" fill="url(#aerPanelGrad)"/>
+      <g clip-path="url(#aerPanelClip)">
+        <g stroke="{p['surface']}" stroke-width="2" opacity="0.55">
+          <line x1="470" y1="130" x2="640" y2="130"/>
+          <line x1="470" y1="110" x2="640" y2="110"/>
+          <line x1="470" y1="150" x2="610" y2="80"/>
+          <line x1="520" y1="150" x2="552" y2="80"/>
+          <line x1="565" y1="150" x2="595" y2="80"/>
+        </g>
+        <rect class="aer-hero-glint" x="-120" y="70" width="60" height="110" fill="{p['surface']}" opacity="0.35" transform="skewX(-18)"/>
+      </g>
+      <line x1="555" y1="150" x2="555" y2="186" stroke="{p['text_muted']}" stroke-width="5"/>
+
+      <!-- Maisons -->
+      <g>
+        <rect x="660" y="140" width="64" height="46" fill="{p['navy']}" opacity="0.85"/>
+        <polygon points="652,140 732,140 692,104" fill="{p['gold']}"/>
+        <rect x="686" y="160" width="14" height="26" fill="{p['surface']}"/>
+      </g>
+      <g>
+        <rect x="745" y="152" width="46" height="34" fill="{p['navy']}" opacity="0.7"/>
+        <polygon points="740,152 796,152 768,126" fill="{p['green']}"/>
+      </g>
+      <g>
+        <rect x="200" y="156" width="46" height="30" fill="{p['navy']}" opacity="0.6"/>
+        <polygon points="195,156 251,156 223,132" fill="{p['red']}" opacity="0.85"/>
+      </g>
+
+      <!-- Arbres (petite touche rurale) -->
+      <g fill="{p['green']}" opacity="0.8">
+        <circle cx="330" cy="168" r="14"/>
+        <rect x="327" y="174" width="6" height="12"/>
+        <circle cx="820" cy="172" r="11"/>
+        <rect x="817" y="177" width="6" height="10"/>
+      </g>
+    </svg>
+    """
+    # `st.markdown` passe par un rendu Markdown avant le HTML : un bloc HTML
+    # brut (ici notre <div>) n'est traité comme tel par Markdown que tant
+    # qu'aucune ligne vide ne l'interrompt — sinon le contenu qui suit est
+    # ré-analysé comme du Markdown, et une ligne indentée de 4 espaces ou
+    # plus devient un bloc de code (QA visuelle : le SVG s'affichait en
+    # texte brut). On retire l'indentation ET les lignes vides du SVG avant
+    # de l'injecter, pour qu'il ne forme qu'un seul bloc HTML continu.
+    svg_compact = "\n".join(
+        line for line in textwrap.dedent(svg).splitlines() if line.strip()
+    )
+    st.markdown(f'<div class="aer-hero-card">{svg_compact}</div>', unsafe_allow_html=True)
 
 
 def section_title(text: str):
